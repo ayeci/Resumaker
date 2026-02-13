@@ -1,0 +1,439 @@
+/* PreviewMUI.module.scss */
+
+/* フォント設定 */
+.serifFont {
+    font-family: "Noto Serif JP", serif;
+}
+
+.stdFont {
+    font-size: 12px;
+    line-height: 1.2;
+}
+
+/* ページレイアウト */
+.wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: fit-content;
+    min-width: 100%;
+    margin: 0 auto;
+    padding: 1rem;
+
+    @media print {
+        display: block;
+        width: auto;
+        padding: 0;
+        margin: 0;
+    }
+}
+
+.controls {
+    width: 100%;
+    max-width: 210mm;
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.5rem;
+
+    @media print {
+        display: none;
+    }
+}
+
+/* 履歴書シート (用紙) */
+.sheet {
+    width: 210mm;
+    min-height: 297mm;
+    padding: 10mm;
+    margin: 0 auto;
+    margin-bottom: 2rem;
+    background-color: white;
+    box-sizing: border-box;
+
+    @media print {
+        width: auto;
+        min-height: 0;
+        margin: 0;
+        padding: 0;
+        box-shadow: none !important;
+        border: none;
+        margin-bottom: 0;
+        break-after: page;
+
+        &:last-child {
+            break-after: auto;
+        }
+    }
+}
+
+/* 履歴・資格 行およびヘッダー */
+.historyRow {
+    display: flex;
+    border-bottom: 1px solid #e5e7eb;
+    height: 30px;
+    border-left: 2px solid black;
+    border-right: 2px solid black;
+}
+
+.historyHeader {
+    display: flex;
+    border: 2px solid black;
+    border-bottom: 1px solid black;
+    height: 32px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    align-items: stretch;
+
+    .cellYear,
+    .cellMonth,
+    .cellContent {
+        font-weight: bold;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+
+        /* @media Print だと背景色/配置を無視されるため 強制的に適用 */
+        background-color: #f3f4f6 !important;
+        display: flex !important;
+    }
+}
+
+.cellYear {
+    width: 60px;
+    border-right: 1px solid black;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+}
+
+.cellMonth {
+    width: 40px;
+    border-right: 1px solid black;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+}
+
+div[class*=flex].cellContent {
+    flex: 1;
+    padding: 8px !important;
+    display: flex !important;
+    align-items: center;
+    font-size: 12px;
+    align-items: center;
+    font-size: 12px;
+    display: flex !important;
+
+    &.alignCenter {
+        justify-content: center;
+    }
+
+    &.alignRight {
+        justify-content: flex-end;
+    }
+
+    &.alignLeft {
+        justify-content: flex-start;
+    }
+}
+
+.flexCenter {
+    justify-content: center !important;
+    text-align: center;
+}
+
+.flexEnd {
+    justify-content: flex-end !important;
+    text-align: right;
+}
+
+.flexStart {
+    justify-content: flex-start !important;
+    text-align: left;
+}
+
+.borderTopThick {
+    border-top: 2px solid black;
+    width: 100%;
+}
+
+.borderTopThin {
+    border-top: 1px solid black;
+    width: 100%;
+}
+
+/* 各セクション */
+
+.headerBox {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+}
+
+.basicInfo {
+    border-left: 2px solid black;
+    border-bottom: 2px solid black;
+
+    .label {
+        width: 80px;
+        padding: 8px;
+        font-size: 12px;
+        font-weight: bold;
+        color: #4b5563;
+        border-right: 1px solid #d1d5db;
+        box-sizing: border-box;
+    }
+
+    /* 内部要素 */
+    .row {
+        display: flex;
+    }
+
+    .mainCol {
+        flex: 1;
+        border-top: 2px solid black;
+    }
+
+    .kanaRow {
+        display: flex;
+        border-bottom: 1px solid #9ca3af;
+
+        .label {
+            padding: 8px;
+            border: none;
+        }
+
+        .value {
+            flex: 1;
+            font-size: 12px;
+        }
+    }
+
+    .nameRow {
+        display: flex;
+        align-items: flex-end;
+        margin-bottom: 8px;
+
+        .label {
+            border: none;
+        }
+
+        .value {
+            flex: 1;
+            font-size: 48px;
+            font-weight: bold;
+            padding-right: 8px;
+        }
+    }
+
+    .photoBox {
+        width: 30mm;
+        height: 40mm;
+        border-left: 2px solid black;
+        border-bottom: 2px solid black;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        font-size: 10px;
+        color: #9ca3af;
+        background-color: #f9fafb;
+        overflow: hidden;
+
+        .portraitImg {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+    }
+
+    .dobBox {
+        display: flex;
+        border-top: 1px solid black;
+        border-right: 2px solid black;
+
+        .dobRow {
+            flex: 1;
+            display: flex;
+
+            .valDob {
+                flex: 1;
+                font-size: 12px;
+                display: flex;
+                align-items: center;
+                padding-left: 8px;
+                border-right: 1px solid black;
+            }
+        }
+
+        .genderRow {
+            flex: 1;
+            display: flex;
+
+            .valGender {
+                width: 80px;
+                font-size: 12px;
+                display: flex;
+                align-items: center;
+                padding-left: 8px;
+            }
+        }
+    }
+
+    .addressBox {
+        border-top: 1px solid black;
+        border-right: 2px solid black;
+
+        .kanaRow {
+            display: flex;
+            border-bottom: 1px solid #9ca3af;
+
+            .label {
+                border-right: 1px solid #d1d5db;
+                padding: 8px;
+                font-size: 10px;
+            }
+
+            .value {
+                flex: 1;
+                padding: 8px;
+                font-size: 10px;
+            }
+        }
+
+        .mainRow {
+            display: flex;
+
+            .label {
+                width: 80px;
+                padding: 8px;
+                font-size: 12px;
+                font-weight: bold;
+                border-right: 1px solid #d1d5db;
+                display: flex;
+                align-items: center;
+            }
+
+            .value {
+                flex: 1;
+                padding: 8px;
+            }
+        }
+    }
+
+    .contactBox {
+        border-top: 1px solid black;
+        display: flex;
+        border-right: 2px solid black;
+
+        .col {
+            flex: 1;
+
+            &:first-child {
+                border-right: 1px solid black;
+            }
+        }
+
+        .row {
+            display: flex;
+            border-bottom: 1px solid #d1d5db;
+        }
+
+        .rowLast {
+            display: flex;
+        }
+
+        .rowEmail {
+            display: flex;
+            height: 100%;
+            align-items: center;
+        }
+
+        .label {
+            width: 80px;
+            padding: 8px;
+            font-size: 12px;
+            border-right: 1px solid #d1d5db;
+        }
+
+        .labelEmail {
+            width: 80px;
+            padding: 8px;
+            font-size: 12px;
+            border-right: 1px solid #d1d5db;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            box-sizing: border-box;
+        }
+
+        .value {
+            flex: 1;
+            padding: 8px;
+            font-size: 12px;
+        }
+
+        .valueEmail {
+            flex: 1;
+            padding: 8px;
+            font-size: 10px;
+            word-break: break-all;
+        }
+    }
+}
+
+
+.motivationBox {
+    border: 2px solid black;
+    padding: 1rem;
+    min-height: 400px;
+}
+
+.requestsBox {
+    border: 2px solid black;
+    padding: 1rem;
+    min-height: 100px;
+    min-height: 100px;
+    /* margin-bottom removed */
+}
+
+.commuteBox {
+    display: flex;
+    border: 2px solid black;
+
+    .timeCol {
+        flex: 1;
+        border-right: 2px solid black;
+        padding: 8px;
+    }
+
+    .infoCol {
+        flex: 3;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .familyRow {
+        display: flex;
+        border-bottom: 2px solid black;
+
+        .half {
+            flex: 1;
+            padding: 8px;
+            display: flex;
+            align-items: center;
+
+            &:first-child {
+                border-right: 2px solid black;
+            }
+        }
+    }
+
+    .remarks {
+        flex: 1;
+        padding: 8px;
+    }
+}

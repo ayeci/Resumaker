@@ -1,0 +1,186 @@
+--- Comparison Start ---
+Mismatch at Row: 3, Col: 5
+  Expected: "2026年 2月 8日　現在"
+  Actual:   "{updated}"
+Mismatch at Row: 3, Col: 6
+  Expected: "2026年 2月 8日　現在"
+  Actual:   "{updated}"
+Mismatch at Row: 3, Col: 7
+  Expected: "2026年 2月 8日　現在"
+  Actual:   "{updated}"
+Mismatch at Row: 12, Col: 4
+  Expected: "携帯：090-0000-0000　/　自宅：03-1234-5678"
+  Actual:   "携帯：{phoneMobile}　/　自宅：{phoneHome}"
+Mismatch at Row: 12, Col: 5
+  Expected: "携帯：090-0000-0000　/　自宅：03-1234-5678"
+  Actual:   "携帯：{phoneMobile}　/　自宅：{phoneHome}"
+Mismatch at Row: 12, Col: 6
+  Expected: "携帯：090-0000-0000　/　自宅：03-1234-5678"
+  Actual:   "携帯：{phoneMobile}　/　自宅：{phoneHome}"
+Mismatch at Row: 12, Col: 7
+  Expected: "携帯：090-0000-0000　/　自宅：03-1234-5678"
+  Actual:   "携帯：{phoneMobile}　/　自宅：{phoneHome}"
+Mismatch at Row: 12, Col: 8
+  Expected: "携帯：090-0000-0000　/　自宅：03-1234-5678"
+  Actual:   "携帯：{phoneMobile}　/　自宅：{phoneHome}"
+Mismatch at Row: 13, Col: 11
+  Expected: ""
+  Actual:   "{history.end}"
+Mismatch at Row: 16, Col: 11
+  Expected: "2019"
+  Actual:   ""
+Mismatch at Row: 16, Col: 12
+  Expected: "4"
+  Actual:   ""
+Mismatch at Row: 16, Col: 13
+  Expected: "基本情報技術者試験 合格"
+  Actual:   ""
+Mismatch at Row: 17, Col: 3
+  Expected: "2011"
+  Actual:   ""
+Mismatch at Row: 17, Col: 4
+  Expected: "4"
+  Actual:   ""
+Mismatch at Row: 17, Col: 5
+  Expected: "東京都立〇〇高等学校 入学"
+  Actual:   ""
+Mismatch at Row: 17, Col: 6
+  Expected: "東京都立〇〇高等学校 入学"
+  Actual:   ""
+Mismatch at Row: 17, Col: 7
+  Expected: "東京都立〇〇高等学校 入学"
+  Actual:   ""
+Mismatch at Row: 17, Col: 8
+  Expected: "東京都立〇〇高等学校 入学"
+  Actual:   ""
+Mismatch at Row: 17, Col: 11
+  Expected: "2022"
+  Actual:   ""
+Mismatch at Row: 17, Col: 12
+  Expected: "10"
+  Actual:   ""
+Mismatch at Row: 17, Col: 13
+  Expected: "TOEIC L&R 800点 取得"
+  Actual:   ""
+Mismatch at Row: 18, Col: 3
+  Expected: "2014"
+  Actual:   ""
+Mismatch at Row: 18, Col: 4
+  Expected: "3"
+  Actual:   ""
+Mismatch at Row: 18, Col: 5
+  Expected: "東京都立〇〇高等学校 卒業"
+  Actual:   ""
+Mismatch at Row: 19, Col: 3
+  Expected: "2014"
+  Actual:   ""
+Mismatch at Row: 19, Col: 4
+  Expected: "4"
+  Actual:   ""
+Mismatch at Row: 19, Col: 5
+  Expected: "〇〇大学 工学部 情報工学科 入学"
+  Actual:   ""
+Mismatch at Row: 19, Col: 6
+  Expected: "〇〇大学 工学部 情報工学科 入学"
+  Actual:   ""
+Mismatch at Row: 19, Col: 7
+  Expected: "〇〇大学 工学部 情報工学科 入学"
+  Actual:   ""
+Mismatch at Row: 19, Col: 8
+  Expected: "〇〇大学 工学部 情報工学科 入学"
+  Actual:   ""
+Mismatch at Row: 20, Col: 5
+  Expected: "職歴"
+  Actual:   ""
+Mismatch at Row: 20, Col: 6
+  Expected: "職歴"
+  Actual:   ""
+Mismatch at Row: 20, Col: 7
+  Expected: "職歴"
+  Actual:   ""
+Mismatch at Row: 20, Col: 8
+  Expected: "職歴"
+  Actual:   ""
+Mismatch at Row: 21, Col: 3
+  Expected: "2018"
+  Actual:   ""
+Mismatch at Row: 21, Col: 4
+  Expected: "3"
+  Actual:   ""
+Mismatch at Row: 21, Col: 5
+  Expected: "株式会社テック・イノベーション 入社"
+  Actual:   ""
+Mismatch at Row: 21, Col: 6
+  Expected: "株式会社テック・イノベーション 入社"
+  Actual:   ""
+Mismatch at Row: 21, Col: 7
+  Expected: "株式会社テック・イノベーション 入社"
+  Actual:   ""
+Mismatch at Row: 21, Col: 8
+  Expected: "株式会社テック・イノベーション 入社"
+  Actual:   ""
+Mismatch at Row: 21, Col: 11
+  Expected: ""
+  Actual:   "{certificate.end}"
+Mismatch at Row: 22, Col: 3
+  Expected: "2021"
+  Actual:   ""
+Mismatch at Row: 22, Col: 4
+  Expected: "9"
+  Actual:   ""
+Mismatch at Row: 22, Col: 5
+  Expected: "同社 一身上の都合により退職"
+  Actual:   ""
+Mismatch at Row: 23, Col: 3
+  Expected: "2021"
+  Actual:   ""
+Mismatch at Row: 23, Col: 4
+  Expected: "10"
+  Actual:   ""
+Mismatch at Row: 23, Col: 5
+  Expected: "グローバルソリューションズ株式会社 入社"
+  Actual:   ""
+Mismatch at Row: 23, Col: 6
+  Expected: "グローバルソリューションズ株式会社 入社"
+  Actual:   ""
+Mismatch at Row: 23, Col: 7
+  Expected: "グローバルソリューションズ株式会社 入社"
+  Actual:   ""
+Mismatch at Row: 23, Col: 8
+  Expected: "グローバルソリューションズ株式会社 入社"
+  Actual:   ""
+Mismatch at Row: 24, Col: 3
+  Expected: "2024"
+  Actual:   ""
+Mismatch at Row: 24, Col: 4
+  Expected: "1"
+  Actual:   ""
+Mismatch at Row: 24, Col: 5
+  Expected: "現在に至る"
+  Actual:   ""
+Mismatch at Row: 24, Col: 6
+  Expected: "現在に至る"
+  Actual:   ""
+Mismatch at Row: 24, Col: 7
+  Expected: "現在に至る"
+  Actual:   ""
+Mismatch at Row: 24, Col: 8
+  Expected: "現在に至る"
+  Actual:   ""
+Mismatch at Row: 25, Col: 5
+  Expected: "以上"
+  Actual:   ""
+Mismatch at Row: 25, Col: 6
+  Expected: "以上"
+  Actual:   ""
+Mismatch at Row: 25, Col: 7
+  Expected: "以上"
+  Actual:   ""
+Mismatch at Row: 25, Col: 8
+  Expected: "以上"
+  Actual:   ""
+Mismatch at Row: 29, Col: 3
+  Expected: ""
+  Actual:   "{history.return}"
+FAILURE: Found 61 mismatches.
+--- Comparison End ---

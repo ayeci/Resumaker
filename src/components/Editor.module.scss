@@ -1,0 +1,92 @@
+.editorRoot {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background-color: white;
+}
+
+.editorToolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    border-bottom: 1px solid #e2e8f0;
+    background-color: #f8fafc;
+}
+
+.editorLabelSection {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.editorLabelText {
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+}
+
+.editorStatusText {
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+.portraitAvatar {
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    border: 1px solid #e2e8f0;
+}
+
+.toolbarIconBtn {
+    color: #64748b;
+}
+
+.toolbarActions {
+    display: flex;
+    gap: 8px;
+}
+
+.portraitWrapper {
+    position: relative;
+    display: inline-flex;
+}
+
+.portraitDeleteBtn {
+    position: absolute !important;
+    top: -8px !important;
+    right: -8px !important;
+    width: 20px !important;
+    height: 20px !important;
+    background-color: #ef4444 !important;
+    color: white !important;
+    padding: 0 !important;
+    z-index: 10;
+    border: 2px solid white !important;
+    border-radius: 50%;
+
+    &:hover {
+        background-color: #dc2626 !important;
+    }
+}
+
+.hiddenInput {
+    display: none;
+}
+
+.editorTextareaContainer {
+    width: 100%;
+    flex: 1;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 149px);
+}
+
+.editorStatusBar {
+    padding: 8px 16px;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: flex-end;
+    background-color: #f8fafc;
+}
