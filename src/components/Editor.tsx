@@ -19,13 +19,15 @@ import {
     FileCode,
     Camera,
     X,
-    AlignLeft
+    AlignLeft,
+    FileSymlink
 } from 'lucide-react';
 import { useResume } from '../context/ResumeHooks';
 import styles from './Editor.module.scss';
 import { resumeSchema } from '../constants/resumeSchema';
 import { loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
+import { Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button } from '@mui/material';
 
 // monaco-yaml のためにローカルの monaco インスタンスを使用するように設定
 loader.config({ monaco });
@@ -47,10 +49,18 @@ monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
  * JSON/YAML形式での直接編集、ファイルインポート、証明写真のアップロード機能を提供する
  */
 export const ResumeEditor = () => {
-    const { resume, mode, setMode, rawText, setRawText, setPortraitFile, parseError } = useResume();
+    const { resume, mode, setMode, rawText, setRawText, setPortraitFile, parseError, resetToSample } = useResume();
     const portraitInputRef = useRef<HTMLInputElement>(null);
 
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
+    const [reloadDialogOpen, setReloadDialogOpen] = useState(false);
+
+    const handleReloadClick = () => setReloadDialogOpen(true);
+    const handleReloadConfirm = () => {
+        resetToSample();
+        setReloadDialogOpen(false);
+    };
+    const handleReloadCancel = () => setReloadDialogOpen(false);
 
     /**
      * エディタの内容が変更された際のハンドラ
@@ -194,8 +204,35 @@ export const ResumeEditor = () => {
                             </Tooltip>
                         )}
                     </Box>
+                    <Tooltip title="サンプルデータの再読み込み">
+                        <IconButton size="small" onClick={handleReloadClick} className={styles.toolbarIconBtn}>
+                            <FileSymlink size={18} />
+                        </IconButton>
+                    </Tooltip>
                 </Box>
             </Box>
+
+            <Dialog
+                open={reloadDialogOpen}
+                onClose={handleReloadCancel}
+                aria-labelledby="alert-dialog-title"
+                aria-describedby="alert-dialog-description"
+            >
+                <DialogTitle id="alert-dialog-title">
+                    {"サンプルデータの再読み込み"}
+                </DialogTitle>
+                <DialogContent>
+                    <DialogContentText id="alert-dialog-description">
+                        現在の内容を破棄して、サンプルデータを読み直しますか？
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={handleReloadCancel}>やめる</Button>
+                    <Button onClick={handleReloadConfirm} autoFocus>
+                        はい
+                    </Button>
+                </DialogActions>
+            </Dialog>
 
             <Box className={styles.editorTextareaContainer}>
                 <Editor
