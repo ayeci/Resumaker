@@ -1,0 +1,333 @@
+:global {
+
+    html,
+    body,
+    #root {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        overflow: hidden;
+    }
+
+    @media print {
+        @page {
+            size: A4;
+            margin: 10mm;
+        }
+
+        body {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        body,
+        #root,
+        .app-container,
+        .main-content,
+        .preview-pane,
+        .preview-scroll-area,
+        .App,
+        .preview-wrapper,
+        main,
+        div[class*="flex"],
+        div[class*="grid"] {
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: white !important;
+            display: block !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            position: static !important;
+        }
+
+        .no-print,
+        button,
+        header,
+        .print\:hidden,
+        .print-hidden,
+        input[type="file"] {
+            display: none !important;
+        }
+
+        .resume-sheet,
+        .preview-container {
+            width: 100% !important;
+            max-width: none !important;
+            min-height: 0 !important;
+            height: auto !important;
+            box-shadow: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            overflow: visible !important;
+            display: block !important;
+        }
+
+        .page-break {
+            display: block !important;
+            width: 100% !important;
+            height: 1px !important;
+            margin-top: 2rem !important;
+            break-before: page !important;
+            page-break-before: always !important;
+            clear: both !important;
+        }
+
+        .avoid-break,
+        tr,
+        .border-2 {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+        }
+
+        .grid {
+            display: block !important;
+        }
+
+        .grid>* {
+            margin-bottom: 2rem;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+    }
+}
+
+.logo {
+    height: 6em;
+    padding: 1.5em;
+    will-change: filter;
+    transition: filter 300ms;
+}
+
+.logoBefore,
+.logoTextBefore {
+    color: #2563eb !important;
+}
+
+.logoTextAfter {
+    display: inline-block;
+    margin: 0 0.0625em;
+    padding: 0 0.0625em;
+    line-height: 0.9;
+    background-color: #e84022 !important;
+    color: white !important;
+}
+
+@keyframes logo-spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    a:nth-of-type(2) .logo {
+        animation: logo-spin infinite 20s linear;
+    }
+}
+
+.card {
+    padding: 2em;
+}
+
+/* テンプレートプレビュースタイル */
+.previewContainer {
+    width: 100%;
+    max-width: 100%;
+    overflow: visible;
+    background: transparent;
+    padding: 10mm;
+    box-sizing: border-box;
+
+    table {
+        border-collapse: collapse;
+        table-layout: fixed;
+        font-family: 'Meiryo', 'MS PGothic', 'Yu Gothic', sans-serif;
+        border: 1px solid #c0c0c0;
+        min-width: 100%;
+        background: white;
+    }
+
+    td,
+    th {
+        border: 1px solid #d1d1d1;
+        padding: 2px 4px;
+        font-size: 11px;
+        line-height: 1.25;
+        vertical-align: middle;
+        word-break: break-all;
+        overflow: hidden;
+    }
+
+    td:empty::after {
+        content: '\00a0';
+    }
+}
+
+/* アプリケーションシェル */
+.appContainer {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+.appHeader {
+    background-color: white !important;
+}
+
+.headerToolbar {
+    justify-content: space-between !important;
+}
+
+.headerLogoSection {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.modeToggleGroup {
+    padding: 4px;
+    border-radius: 4px;
+}
+
+.modeToggleBtn {
+    box-shadow: none !important;
+
+    &.active {
+        color: rgba(0, 0, 0, 0.87);
+        background-color: rgba(0, 0, 0, 0.08);
+    }
+
+    &.inactive {
+        color: rgba(0, 0, 0, 0.54);
+        background-color: transparent;
+    }
+}
+
+.exportBtnGroup {
+    display: flex;
+    margin-left: 16px;
+}
+
+.exportBtnLeft {
+    border-top-right-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+}
+
+.exportBtnRight {
+    border-top-left-radius: 0 !important;
+    border-bottom-left-radius: 0 !important;
+    min-width: 32px !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    border-left: 1px solid rgba(255, 255, 255, 0.3) !important;
+}
+
+/* メインレイアウト */
+.mainContent {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: row;
+    position: relative;
+}
+
+.editorPane {
+    height: 100%;
+    border-right: 1px solid #e5e7eb;
+    background-color: #f9fafb;
+    overflow-y: auto;
+}
+
+.resizeHandle {
+    width: 4px;
+    cursor: col-resize;
+    transition: background-color 0.2s;
+    z-index: 10;
+
+    &:hover,
+    &.dragging {
+        background-color: #2563eb;
+    }
+
+    &.default {
+        background-color: #e5e7eb;
+    }
+}
+
+.buttonIcon {
+    margin-right: 8px;
+}
+
+.previewPane {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    background-color: #e5e7eb;
+    position: relative;
+
+    :global(.template-nav-btn) {
+        position: absolute !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        background-color: rgba(255, 255, 255, 0.8) !important;
+        z-index: 100 !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+
+        &:hover {
+            background-color: rgba(255, 255, 255, 1) !important;
+        }
+
+        &:global(.template-nav-prev) {
+            left: 16px !important;
+            right: auto !important;
+        }
+
+        &:global(.template-nav-next) {
+            right: 16px !important;
+            left: auto !important;
+        }
+    }
+}
+
+.previewScrollArea {
+    width: 100%;
+    height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.hiddenInput {
+    display: none;
+}
+
+.appFooter {
+    padding: 8px;
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    background-color: #f9fafb;
+    color: #6b7280;
+    font-size: 0.875rem;
+
+    a {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        color: inherit;
+        text-decoration: none;
+
+        &:hover {
+            color: #111827;
+        }
+    }
+}

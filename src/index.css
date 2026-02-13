@@ -1,0 +1,33 @@
+@media print {
+  @page {
+    margin: 10mm;
+    size: auto;
+  }
+
+  /* Global print resets are handled by Tailwind print:hidden on specific elements */
+
+  /* Reset body/html for full page printing */
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+
+  /* Style the resume sheets for print */
+  .resume-sheet {
+    width: auto;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+    box-shadow: none !important;
+    border: none !important;
+    break-after: page;
+    /* Ensure page break after each sheet */
+  }
+
+  /* Remove break-after from the last sheet to avoid empty page */
+  .resume-sheet:last-child {
+    break-after: auto;
+  }
+}

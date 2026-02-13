@@ -1,0 +1,14 @@
+src/App.tsx(1,8): error TS6133: 'React' is declared but its value is never read.
+src/components/Editor.tsx(7,5): error TS6133: 'TextField' is declared but its value is never read.
+src/components/Editor.tsx(8,5): error TS6133: 'Button' is declared but its value is never read.
+src/components/Editor.tsx(13,5): error TS6133: 'Save' is declared but its value is never read.
+src/components/Editor.tsx(15,5): error TS6133: 'FileType' is declared but its value is never read.
+src/components/Editor.tsx(16,5): error TS6133: 'PlusCircle' is declared but its value is never read.
+src/components/Editor.tsx(17,5): error TS6133: 'Trash2' is declared but its value is never read.
+src/components/Editor.tsx(22,1): error TS6133: 'clsx' is declared but its value is never read.
+src/components/Editor.tsx(25,38): error TS6133: 'setMode' is declared but its value is never read.
+src/context/ResumeContext.tsx(124,76): error TS6133: 'fm' is declared but its value is never read.
+src/utils/exporter.ts(3,112): error TS6133: 'TemplateEntry' is declared but its value is never read.
+src/utils/exporter.ts(263,67): error TS7006: Parameter '_' implicitly has an 'any' type.
+src/utils/exporter.ts(263,70): error TS7006: Parameter 'key' implicitly has an 'any' type.
+src/utils/exporter.ts(315,44): error TS18048: 'sheetXml' is possibly 'undefined'.

@@ -1,0 +1,12 @@
+Probing: D:\Users\ayebee\source\repos\Resumaker\繝・せ繝育畑繝・Φ繝励Ξ繝ｼ繝・xlsx
+
+--- ExcelJS Probe ---
+Worksheet Images: []
+Worksheet.media: undefined
+Worksheet.drawing: undefined
+Workbook.media: []
+Workbook.model.media: []
+
+--- SheetJS (xlsx) Probe ---
+Sheet Names: [ '蜴滓悽' ]
+Sheet Special Keys: [ '!ref', '!margins', '!merges' ]
