@@ -25,6 +25,7 @@
     "lucide-react": "^0.563.0",
     "mammoth": "^1.11.0",
     "monaco-editor": "^0.55.1",
+    "monaco-yaml": "^5.4.1",
     "pdfjs-dist": "^5.4.624",
     "pizzip": "^3.2.0",
     "react": "^19.2.0",
