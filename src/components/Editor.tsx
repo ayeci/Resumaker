@@ -1,5 +1,6 @@
-import { useRef, type ChangeEvent } from 'react';
+import { useRef, useState, type ChangeEvent } from 'react';
 import Editor from '@monaco-editor/react';
+import yaml from 'js-yaml';
 import {
     Box,
     Typography,
@@ -12,21 +13,110 @@ import {
 import {
     FileCode,
     Camera,
-    X
+    X,
+    AlignLeft
 } from 'lucide-react';
 import { useResume } from '../context/ResumeHooks';
 import styles from './Editor.module.scss';
+import { resumeSchema } from '../constants/resumeSchema';
+import { loader } from '@monaco-editor/react';
+import * as monaco from 'monaco-editor';
+
+// monaco-yaml のためにローカルの monaco インスタンスを使用するように設定
+loader.config({ monaco });
+
+// JSONの場合は組み込みの機能を設定
+// @ts-expect-error: jsonDefaults の型定義不足を回避
+monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
+    validate: true,
+    schemas: [{
+        uri: 'http://myserver/resume-schema.json',
+        fileMatch: ['*'],
+        schema: resumeSchema
+    }]
+});
+
+
 
 /**
  * JSON/YAML形式での直接編集、ファイルインポート、証明写真のアップロード機能を提供する
  */
 export const ResumeEditor = () => {
-    const { resume, setResume, mode, setMode, rawText, setRawText, setPortraitFile } = useResume();
-    const fileInputRef = useRef<HTMLInputElement>(null);
+    const { resume, mode, setMode, rawText, setRawText, setPortraitFile, parseError } = useResume();
     const portraitInputRef = useRef<HTMLInputElement>(null);
 
-    const handleEditorChange = (value: string | undefined) => {
+    const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+    /**
+     * エディタの内容が変更された際のハンドラ
+     * ユーザー入力による変更のみをContextに反映させる。
+     * プログラムによる値の注入（flush）時はState更新をスキップし、無限ループやデータ競合を防ぐ。
+     */
+    const handleEditorChange = (value: string | undefined, event: monaco.editor.IModelContentChangedEvent) => {
+        // プログラムによる変更（isFlush）の場合は、Contextへの書き戻しを行わない
+        // これにより、データロード時の意図しない上書き（キャッシュ戻り）を防ぐ
+        if (event.isFlush) {
+            return;
+        }
         setRawText(value || '');
+    };
+
+    const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+
+    const handleEditorDidMount = (editor: monaco.editor.IStandaloneCodeEditor) => {
+        editorRef.current = editor;
+    };
+
+    /**
+     * エディタの内容を手動でフォーマット（整形）する
+     * JSONモード: Monaco Editor標準のフォーマッタを使用
+     * YAMLモード: js-yamlを使用してダンプし直し、スペース2つのインデントを適用する
+     * （monaco-yamlのWorkerが無効化されているため、手動実装している）
+     */
+    const handleFormat = async () => {
+        if (editorRef.current) {
+
+            if (mode === 'yaml') {
+                // monaco-yamlが無効化されているため、js-yamlを使用して手動フォーマットを行う
+                try {
+                    const currentValue = editorRef.current.getValue();
+                    const parsed = yaml.load(currentValue, { schema: yaml.JSON_SCHEMA });
+                    if (parsed) {
+                        const formatted = yaml.dump(parsed, {
+                            lineWidth: -1,
+                            noRefs: true,
+                            quotingType: '"',
+                            indent: 2
+                        });
+                        // カーソル位置を維持しようとすると複雑になるため、単純に値を更新する
+                        // pushEditOperationsを使うとUndoスタックが維持される
+                        const model = editorRef.current.getModel();
+                        if (model) {
+                            editorRef.current.pushUndoStop();
+                            editorRef.current.executeEdits('format', [{
+                                range: model.getFullModelRange(),
+                                text: formatted,
+                                forceMoveMarkers: true
+                            }]);
+                            editorRef.current.pushUndoStop();
+                        }
+                    }
+                } catch (e) {
+                    console.error('YAML Format failed:', e);
+                    setStatusMessage('Format Failed');
+                    setTimeout(() => setStatusMessage(null), 2000);
+                    return;
+                }
+            } else {
+                // JSONの場合は組み込みのFormatterを使用
+                await editorRef.current.getAction('editor.action.formatDocument')?.run();
+            }
+
+            setStatusMessage('Formatted');
+            setTimeout(() => setStatusMessage(null), 2000);
+        } else {
+            console.warn('Editor instance not found');
+        }
     };
 
 
@@ -69,6 +159,11 @@ export const ResumeEditor = () => {
                     </ToggleButtonGroup>
                 </Box>
                 <Box className={styles.toolbarActions}>
+                    <Tooltip title="ドキュメントを整形">
+                        <IconButton size="small" onClick={handleFormat} className={styles.toolbarIconBtn}>
+                            <AlignLeft size={18} />
+                        </IconButton>
+                    </Tooltip>
                     <Box className={styles.portraitWrapper}>
                         {resume.portrait ? (
                             <Box sx={{ position: 'relative' }}>
@@ -104,6 +199,7 @@ export const ResumeEditor = () => {
                     language={mode}
                     value={rawText}
                     onChange={handleEditorChange}
+                    onMount={handleEditorDidMount}
                     options={{
                         minimap: { enabled: false },
                         fontSize: 14,
@@ -115,38 +211,29 @@ export const ResumeEditor = () => {
                         folding: true,
                         lineDecorationsWidth: 0,
                         lineNumbersMinChars: 0,
+                        // YAML用にスペースインデントを強制
+                        insertSpaces: true,
+                        tabSize: 2,
+                        detectIndentation: false,
+                        // 空行のインデントが削除されるのを防ぐ（マルチライン文字列対策）
+                        trimAutoWhitespace: false,
                     }}
                 />
             </Box>
 
             <Box className={styles.editorStatusBar}>
-                <Typography variant="caption" className={styles.editorStatusText}>
-                    {rawText.length} 文字 | UTF-8
-                </Typography>
+                {parseError ? (
+                    <Typography variant="caption" className={styles.editorErrorText}>
+                        {parseError.line ? `Line ${parseError.line}: ` : ''}{parseError.message}
+                    </Typography>
+                ) : (
+                    <Typography variant="caption" className={styles.editorStatusText}>
+                        {statusMessage || `${rawText.length} 文字 | UTF-8 | Schema Validated`}
+                    </Typography>
+                )}
             </Box>
 
-            <input
-                type="file"
-                ref={fileInputRef}
-                className={styles.hiddenInput}
-                title="対象のファイル"
-                accept=".json"
-                onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (event) => {
-                            try {
-                                const json = JSON.parse(event.target?.result as string);
-                                setResume(json);
-                            } catch {
-                                alert('不正なJSONファイルです');
-                            }
-                        };
-                        reader.readAsText(file);
-                    }
-                }}
-            />
+
             <input
                 type="file"
                 title="ポートレート写真を指定"

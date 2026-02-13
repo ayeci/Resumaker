@@ -9,23 +9,15 @@ import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 import { DEFAULT_RESUME, type ResumeConfig, type HistoryItem } from '../types/resume';
 
-// ヒューリスティックマッパー（今のところプレースホルダー）
+/**
+ * テキストデータをResumeConfigにマッピングする（簡易実装）
+ * 現状は抽出したテキストをすべて「備考」欄に追記するのみ。
+ * @param text抽出されたテキスト
+ * @returns マッピングされたResumeConfig
+ */
 const mapTextToResume = (text: string): ResumeConfig => {
-    // 非常に基本的な抽出戦略:
-    // 1. 今のところテキストを厳密に「備考」にダンプするか、キーワードを見つけようとします。
-    // 実際の初装では正規表現を使用して「住所」「氏名」などを検索します。
-
     const config = { ...DEFAULT_RESUME };
-
-    // セクションを見つけようとする
-    // これは入力形式に大きく依存するため、AIや特定のテンプレートマッチングなしでは困難です。
-    // このツールの場合、通常、生のテキストをサイドパネルのソース（YAML/JSON）にインポートするのは難しいです。
-    // 最善のアプローチ: JSON/YAMLファイルの場合はテキストマッチさせます。
-    // 非構造化データの場合は、「備考」または一時的な「インポート済み」フィールドに入れます。
-    // 解析に失敗した場合に備えて、抽出したテキストを備考に入れてユーザーがコピー＆ペーストできるようにします。
-
     config.remarks = `【Imported extracted text】\n${text}\n\n` + config.remarks;
-
     return config;
 };
 
@@ -116,9 +108,6 @@ const normalizeHistoryItem = (item: string | Partial<HistoryItem>): HistoryItem 
         if (typeof item === 'object' && item !== null) {
             return {
                 id: (item as HistoryItem).id || crypto.randomUUID(),
-                year: item.year || '',
-                month: item.month || '',
-                content: item.content || '',
                 ...item
             } as HistoryItem;
         }
@@ -128,8 +117,6 @@ const normalizeHistoryItem = (item: string | Partial<HistoryItem>): HistoryItem 
     const parts = item.split('/').map(p => p.trim());
     const result: HistoryItem = {
         id: crypto.randomUUID(),
-        year: '',
-        month: '',
         content: ''
     };
 
@@ -172,7 +159,8 @@ const normalizeHistoryItem = (item: string | Partial<HistoryItem>): HistoryItem 
 };
 
 /**
- * 履歴書データ全体のリスト項目を正規化する
+ * 履歴書データ全体のリスト項目（学歴・職歴・資格）を正規化する
+ * 各項目が文字列の場合は構造化オブジェクトに変換し、IDを付与する。
  * @param data 部分的なResumeConfigデータ
  * @returns 正規化されたResumeConfig
  */

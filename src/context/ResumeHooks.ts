@@ -22,8 +22,8 @@ export interface ResumeContextType {
     mode: EditorMode;
     /** エディタモードを変更する */
     setMode: (mode: EditorMode) => void;
-    /** パースエラーメッセージ (nullならエラーなし) */
-    parseError: string | null;
+    /** パースエラー情報 (nullならエラーなし) */
+    parseError: { message: string; line?: number } | null;
     /** 外部データをインポートする */
     importData: (data: string | ResumeConfig, type: 'json' | 'yaml' | 'auto') => void;
     /** インポート元のフォーマット */
