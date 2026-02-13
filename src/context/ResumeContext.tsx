@@ -1,3 +1,8 @@
+/**
+ * Resumaker
+ * (c) 2026 ayeci
+ * Released under the MIT License.
+ */
 import { useState, type ReactNode, useRef } from 'react';
 import yaml from 'js-yaml';
 import { DEFAULT_RESUME, type ResumeConfig, DEFAULT_EXPORT_OPTIONS, type ExportOptions, type TemplateEntry } from '../types/resume';
@@ -23,10 +28,8 @@ const removeEmptyProperties = (obj: any): any => {
                 // 現在は { nested: {} } のように空オブジェクトは残る仕様
                 // もし { year: "" } -> {} となり、それを親から消したいなら:
                 if (typeof val === 'object' && !Array.isArray(val) && Object.keys(val).length === 0) {
-                    // ignore empty object if strict cleanup needed
-                    // But sometimes empty object is valid (e.g. strict structure). For resume, usually fine to keep or remove.
-                    // The user complained about year/month expansion, which are strings.
-                    // So basic logic is fine.
+                    // 厳密なクリーンアップが必要な場合は空のオブジェクトを無視する
+                    // ただし、空のオブジェクトが有効な場合もある（厳密な構造など）。履歴書の場合、通常は維持しても削除しても問題なし。
                 }
                 newObj[key] = val;
             }

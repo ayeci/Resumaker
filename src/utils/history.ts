@@ -1,3 +1,8 @@
+/**
+ * Resumaker
+ * (c) 2026 ayeci
+ * Released under the MIT License.
+ */
 import type { HistoryItem } from '../types/resume';
 
 const ENDING_KEYWORDS = ['現在', '至る', '退職', '退社', '卒業', '修了', '終了', '完了', '満了', '予定'];

@@ -1,3 +1,8 @@
+/**
+ * Resumaker
+ * (c) 2026 ayeci
+ * Released under the MIT License.
+ */
 export const resumeSchema = {
     $schema: "http://json-schema.org/draft-07/schema#",
     type: "object",

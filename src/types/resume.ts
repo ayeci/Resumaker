@@ -1,4 +1,9 @@
 /**
+ * Resumaker
+ * (c) 2026 ayeci
+ * Released under the MIT License.
+ */
+/**
  * 履歴書データ構造定義
  */
 export interface ResumeConfig {

@@ -1,3 +1,8 @@
+/**
+ * Resumaker
+ * (c) 2026 ayeci
+ * Released under the MIT License.
+ */
 import { useState, useRef } from 'react';
 import { Box, AppBar, Toolbar, Typography, Button, IconButton, ToggleButton, ToggleButtonGroup, CircularProgress, Menu, MenuItem, ButtonGroup, Checkbox, ListItemText, ListItemIcon, Divider } from '@mui/material';
 import { Settings, Printer, ChevronLeft, ChevronRight, FileText, LayoutTemplate, FileUp, Upload, ChevronDown, Eye, EyeOff, Github, Shield } from 'lucide-react';

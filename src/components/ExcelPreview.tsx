@@ -1,3 +1,8 @@
+/**
+ * Resumaker
+ * (c) 2026 ayeci
+ * Released under the MIT License.
+ */
 import React, { useState, useEffect } from 'react';
 import { Workbook } from '@fortune-sheet/react';
 import { transformExcelToFortune } from '@zenmrp/fortune-sheet-excel';
