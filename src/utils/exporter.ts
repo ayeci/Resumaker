@@ -1,3 +1,8 @@
+/**
+ * Resumaker
+ * (c) 2026 ayeci
+ * Released under the MIT License.
+ */
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import { type ResumeConfig, DEFAULT_RESUME, type HistoryItem, type ExportOptions, DEFAULT_EXPORT_OPTIONS } from "../types/resume";
@@ -85,7 +90,7 @@ export const generateWordBlob = async (resume: ResumeConfig, templateFile: File 
                         const cx = parseInt(extNode.getAttribute('cx') || '0', 10);
                         const cy = parseInt(extNode.getAttribute('cy') || '0', 10);
                         if (cx > 0 && cy > 0) {
-                            // EMUs to Pixels (1px = 9525 EMUs at 96dpi)
+                            // EMUからピクセルへの変換 (96dpiの場合、1px = 9525 EMU)
                             portraitSize.width = Math.round(cx / 9525);
                             portraitSize.height = Math.round(cy / 9525);
                         }
@@ -144,11 +149,11 @@ export const generateWordBlob = async (resume: ResumeConfig, templateFile: File 
         zip.file(docXmlPath, docXml);
     }
 
-    // Image Module Options
+    // 画像モジュールオプション
     const imageOptions = {
         centered: false,
         getImage: (tagValue: string) => {
-            // base64 string handling
+            // Base64文字列の処理
             const cleanBase64 = tagValue.replace(/^data:image\/(png|jpg|jpeg);base64,/, "");
             return Uint8Array.from(atob(cleanBase64), c => c.charCodeAt(0));
         },
@@ -157,7 +162,7 @@ export const generateWordBlob = async (resume: ResumeConfig, templateFile: File 
             if (portraitSize && portraitSize.width > 0 && portraitSize.height > 0) {
                 return [portraitSize.width, portraitSize.height];
             }
-            return [150, 200]; // Fallback
+            return [150, 200]; // フォールバック
         }
     };
 

@@ -1,3 +1,8 @@
+/**
+ * Resumaker
+ * (c) 2026 ayeci
+ * Released under the MIT License.
+ */
 import { useRef, useState, type ChangeEvent } from 'react';
 import Editor from '@monaco-editor/react';
 import yaml from 'js-yaml';

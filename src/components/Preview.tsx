@@ -1,3 +1,8 @@
+/**
+ * Resumaker
+ * (c) 2026 ayeci
+ * Released under the MIT License.
+ */
 import React, { Suspense } from 'react';
 import { useResume } from '../context/ResumeHooks';
 import { formatDob, formatDate } from '../utils/date';
@@ -266,7 +271,7 @@ export const Preview: React.FC = () => {
         },
         // 余白 (Basic - History)
         { id: 'gap-basic-history', height: H_GAP, content: <Box style={{ height: H_GAP }} /> },
-        // History Header
+        // 履歴ヘッダー
         {
             id: 'history-header', height: H_TABLE_HEADER, content: (
                 <Box className={styles.historyHeader}>

@@ -1,3 +1,8 @@
+/**
+ * Resumaker
+ * (c) 2026 ayeci
+ * Released under the MIT License.
+ */
 import React, { useEffect, useRef, useState } from 'react';
 import { renderAsync } from 'docx-preview';
 import type { ResumeConfig, ExportOptions } from '../types/resume';
@@ -22,16 +27,16 @@ const WordPreview: React.FC<Props> = ({ templateBuffer, resume, options }) => {
             setLoading(true);
             setError(null);
             try {
-                // 1. Generate the filled Word document blob using existing utility
-                // Note: generateWordBlob returns a Blob
+                // 1. 既存のユーティリティを使用して記入済みのWordドキュメントBlobを生成
+                // 注意: generateWordBlob は Blob を返す
                 const blob = await generateWordBlob(resume, templateBuffer, options);
 
-                // 2. Render using docx-preview
+                // 2. docx-preview を使用してレンダリング
                 if (containerRef.current) {
-                    containerRef.current.innerHTML = ''; // Clear previous content
+                    containerRef.current.innerHTML = ''; // 以前のコンテンツをクリア
                     await renderAsync(blob, containerRef.current, undefined, {
-                        className: "docx-preview-content", // Optional class for styling
-                        inWrapper: true, // Use a wrapper
+                        className: "docx-preview-content", // スタイリング用のオプションクラス
+                        inWrapper: true, // ラッパーを使用
                         ignoreWidth: false,
                         ignoreHeight: false,
                         ignoreFonts: false,

@@ -1,4 +1,9 @@
 /**
+ * Resumaker
+ * (c) 2026 ayeci
+ * Released under the MIT License.
+ */
+/**
  * 日付文字列を「YYYY年 M月 D日」形式にフォーマットする
  * @param dateStr 日付文字列
  * @returns フォーマット済み日付文字列

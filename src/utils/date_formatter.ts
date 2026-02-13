@@ -1,5 +1,11 @@
 
 /**
+ * Resumaker
+ * (c) 2026 ayeci
+ * Released under the MIT License.
+ */
+
+/**
  * 日付を指定されたパターンに従ってフォーマットする
  * 和暦、英名月、曜日などのカスタムトークンに対応
  * @param dateStr 日付文字列

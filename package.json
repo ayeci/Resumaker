@@ -2,6 +2,7 @@
   "name": "resumaker",
   "private": true,
   "version": "0.0.0",
+  "author": "ayeci",
   "type": "module",
   "scripts": {
     "dev": "vite",
