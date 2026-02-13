@@ -1,5 +1,7 @@
 # Resumaker
 
+Created and maintained by ayeci with Antigravity
+
 **Resumaker** は、YAML/JSONファイル形式で記述された履歴書データをもとに、ExcelおよびWord形式の履歴書を生成するアプリケーションです。
 データの管理をテキストベース（YAML or JSON）で行うことで、バージョン管理や修正を容易にし、デザインされたテンプレートへの流し込みを自動化します。
 
@@ -467,3 +469,4 @@ npm run dev
 ## ライセンス
 
 本プロジェクトは [MIT License](./LICENSE.md) のもとで公開されています。
+Copyright (c) 2026 ayeci
