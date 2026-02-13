@@ -8,6 +8,7 @@ import yaml from 'js-yaml';
 import { DEFAULT_RESUME, type ResumeConfig, DEFAULT_EXPORT_OPTIONS, type ExportOptions, type TemplateEntry } from '../types/resume';
 import { ResumeContext, type EditorMode } from './ResumeHooks';
 import { normalizeResumeData } from '../utils/importer';
+import sampleYaml from '../../example/sample.yaml?raw'; // サンプルデータを読み込む
 
 /**
  * オブジェクトから空の値（null, undefined, 空文字）を再帰的に削除する
@@ -87,9 +88,22 @@ const serializeResume = (resume: ResumeConfig, mode: EditorMode): string => {
  * アプリケーション全体で履歴書の状態を共有する
  */
 export const ResumeProvider = ({ children }: { children: ReactNode }) => {
-    const [resume, setResumeState] = useState<ResumeConfig>(DEFAULT_RESUME);
+    // サンプルデータを初期値としてロード
+    const initialResume = (() => {
+        try {
+            const parsed = yaml.load(sampleYaml, { schema: yaml.JSON_SCHEMA });
+            if (parsed && typeof parsed === 'object') {
+                return normalizeResumeData(parsed as Partial<ResumeConfig>) as ResumeConfig;
+            }
+        } catch (e) {
+            console.error('Failed to load sample yaml:', e);
+        }
+        return DEFAULT_RESUME;
+    })();
+
+    const [resume, setResumeState] = useState<ResumeConfig>(initialResume);
     const [mode, setMode] = useState<EditorMode>('yaml');
-    const [rawText, setRawText] = useState<string>(() => serializeResume(DEFAULT_RESUME, 'yaml'));
+    const [rawText, setRawText] = useState<string>(sampleYaml);
     const [parseError, setParseError] = useState<{ message: string; line?: number } | null>(null);
     const [sourceFormat, setSourceFormat] = useState<'word' | 'excel' | 'pdf' | 'other' | null>(null);
     const [templateFiles, setTemplateFiles] = useState<TemplateEntry[]>([]);
@@ -266,12 +280,36 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
         r.readAsDataURL(file);
     };
 
+    const resetToSample = () => {
+        try {
+            const parsed = yaml.load(sampleYaml, { schema: yaml.JSON_SCHEMA });
+            if (parsed && typeof parsed === 'object') {
+                const normalized = normalizeResumeData(parsed as Partial<ResumeConfig>);
+                const merged = { ...normalized } as ResumeConfig;
+                // MEMO: サンプルデータには画像がない想定だが、もしあればここでセット。現状は portrait の維持はしない（「破棄」なので）
+
+                setResumeState(merged);
+                setParseError(null);
+
+                // 現在のモードに合わせてテキストを設定
+                if (mode === 'json') {
+                    setRawText(JSON.stringify(merged, null, 2));
+                } else {
+                    setRawText(sampleYaml);
+                }
+            }
+        } catch (e) {
+            console.error('Failed to reset to sample:', e);
+            setParseError({ message: 'サンプルデータの読み込みに失敗しました' });
+        }
+    };
+
     return (
         <ResumeContext.Provider value={{
             resume, setResume: handleSetResume, rawText, setRawText: handleSetRawText, mode, setMode: handleSetMode, parseError, importData,
             sourceFormat, templates: templateFiles, addTemplate: async (f, _fm) => addTemplates([f]), addTemplates, removeTemplate,
             toggleTemplateCheck, selectedTemplateId, setSelectedTemplateId, exportOptions, setExportOptions, previewMode, setPreviewMode,
-            portraitFile, setPortraitFile: handleSetPortraitFile
+            portraitFile, setPortraitFile: handleSetPortraitFile, resetToSample
         }}>
             {children}
         </ResumeContext.Provider>
