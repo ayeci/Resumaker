@@ -397,7 +397,7 @@ export const Preview: React.FC = () => {
             );
         } else if (selectedTemplate.format === 'word') {
             return (
-                <WordPreview templateBuffer={selectedTemplate.arrayBuffer} resume={resume} />
+                <WordPreview templateBuffer={selectedTemplate.arrayBuffer} resume={resume} options={exportOptions} />
             );
         } else {
             return <div>サポートされていないフォーマットです</div>;

@@ -1,15 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { renderAsync } from 'docx-preview';
-import type { ResumeConfig } from '../types/resume';
+import type { ResumeConfig, ExportOptions } from '../types/resume';
 import { generateWordBlob } from '../utils/exporter';
 import styles from './WordPreview.module.scss';
 
 interface Props {
     templateBuffer: ArrayBuffer;
     resume: ResumeConfig;
+    options: ExportOptions;
 }
 
-const WordPreview: React.FC<Props> = ({ templateBuffer, resume }) => {
+const WordPreview: React.FC<Props> = ({ templateBuffer, resume, options }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -23,7 +24,7 @@ const WordPreview: React.FC<Props> = ({ templateBuffer, resume }) => {
             try {
                 // 1. Generate the filled Word document blob using existing utility
                 // Note: generateWordBlob returns a Blob
-                const blob = await generateWordBlob(resume, templateBuffer);
+                const blob = await generateWordBlob(resume, templateBuffer, options);
 
                 // 2. Render using docx-preview
                 if (containerRef.current) {
@@ -52,7 +53,7 @@ const WordPreview: React.FC<Props> = ({ templateBuffer, resume }) => {
         };
 
         renderDoc();
-    }, [templateBuffer, resume]);
+    }, [templateBuffer, resume, options]);
 
     return (
         <div className={styles.wordPreviewContainer}>
