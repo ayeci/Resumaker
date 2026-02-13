@@ -5,6 +5,7 @@ import { saveAs } from 'file-saver';
 import { formatDob, formatDate, calculateAge } from './date';
 import { buildCombinedHistory, processHistory } from './history';
 import { formatCustomDate } from './date_formatter';
+import ImageModule from 'docxtemplater-image-module-free';
 
 const toArrayBuffer = async (template: File | ArrayBuffer): Promise<ArrayBuffer> => {
     if (template instanceof ArrayBuffer) return template;
@@ -23,20 +24,188 @@ export const generateWordBlob = async (resume: ResumeConfig, templateFile: File 
     const arrayBuffer = await toArrayBuffer(templateFile);
     const zip = new PizZip(arrayBuffer);
 
+    // 画像タグの自動修復とシェイプ処理
+    // 1. タグの置換 ({portrait} -> {%portrait})
+    // 2. 親シェイプの透明化 (枠線・背景削除) とマージン削除
+    // 3. シェイプのサイズ抽出
+    const docXmlPath = 'word/document.xml';
+    const docXmlFile = zip.file(docXmlPath);
+    const portraitSize: { width: number; height: number } | null = { width: 0, height: 0 }; // 参照渡し用のオブジェクト
+
+    if (docXmlFile) {
+        let docXml = docXmlFile.asText();
+
+        // DOMParserでパースして安全にXML操作を行う
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(docXml, "application/xml");
+
+        // 名前空間定義
+        const namespaces = {
+            w: "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+            wps: "http://schemas.microsoft.com/office/word/2010/wordprocessingShape",
+            a: "http://schemas.openxmlformats.org/drawingml/2006/main"
+        };
+
+        // XPath評価ヘルパー
+        const evaluateXPath = (xpath: string, context: Node) => {
+            // XPathResult.FIRST_ORDERED_NODE_TYPE = 9
+            const result = xmlDoc.evaluate(xpath, context, (prefix) => namespaces[prefix as keyof typeof namespaces] || null, 9, null);
+            return result.singleNodeValue;
+        };
+
+        // document.xml内のすべてのテキストノードを走査し、{portrait} などを探す
+        // XPathResult.ORDERED_NODE_SNAPSHOT_TYPE = 7
+        const textNodes = xmlDoc.evaluate("//w:t", xmlDoc, (prefix) => prefix === 'w' ? namespaces.w : null, 7, null);
+
+        for (let i = 0; i < textNodes.snapshotLength; i++) {
+            const node = textNodes.snapshotItem(i);
+            if (node && node.textContent && /{(#|%)?portrait}/.test(node.textContent)) {
+                // タグを正規化 ({%portrait} に統一)
+                if (!node.textContent.includes('{%portrait}')) {
+                    node.textContent = node.textContent.replace(/{(#)?portrait}/g, '{%portrait}');
+                }
+
+                // 親のシェイプ (wps:wsp) を探す
+                // w:t -> w:r -> w:p -> w:txbxContent -> wps:txbx -> wps:wsp
+                let current: Node | null = node;
+                let shapeNode: Node | null = null;
+                while (current) {
+                    if (current.nodeName === 'wps:wsp') {
+                        shapeNode = current;
+                        break;
+                    }
+                    current = current.parentNode;
+                }
+
+                if (shapeNode) {
+                    // 1. サイズ抽出 (cx, cy are in EMUs)
+                    // wps:spPr -> a:xfrm -> a:ext
+                    const extNode = evaluateXPath(".//wps:spPr/a:xfrm/a:ext", shapeNode) as Element;
+                    if (extNode) {
+                        const cx = parseInt(extNode.getAttribute('cx') || '0', 10);
+                        const cy = parseInt(extNode.getAttribute('cy') || '0', 10);
+                        if (cx > 0 && cy > 0) {
+                            // EMUs to Pixels (1px = 9525 EMUs at 96dpi)
+                            portraitSize.width = Math.round(cx / 9525);
+                            portraitSize.height = Math.round(cy / 9525);
+                        }
+                    }
+
+                    // 2. スタイル削除 (透明化)
+                    // wps:spPr 内の a:ln (線) と a:solidFill / a:gradFill 等 (塗りつぶし) を a:noFill に変更
+                    const spPrNode = evaluateXPath(".//wps:spPr", shapeNode) as Element;
+                    if (spPrNode) {
+                        // 既存の塗りつぶし系要素を削除して a:noFill を追加
+                        const fillTags = ['a:noFill', 'a:solidFill', 'a:gradFill', 'a:blipFill', 'a:pattFill', 'a:grpFill'];
+                        fillTags.forEach(tag => {
+                            const fills = spPrNode.getElementsByTagName(tag);
+                            while (fills.length > 0) {
+                                const node = fills[0];
+                                if (node.parentNode) {
+                                    node.parentNode.removeChild(node);
+                                } else {
+                                    break;
+                                }
+                            }
+                        });
+
+                        // a:noFill を作成して挿入 (プロパティの順序維持が必要だが、noFillはどこでも効きやすい)
+                        // ただしスキーマ的には xfrm, prstGeom の後あたり
+                        const noFill = xmlDoc.createElementNS(namespaces.a, "a:noFill");
+                        spPrNode.appendChild(noFill);
+
+                        // 枠線 (a:ln) の処理
+                        const lnNode = evaluateXPath(".//a:ln", spPrNode) as Element;
+                        if (lnNode) {
+                            // 既存のlnの中身を空にして noFill を入れる
+                            while (lnNode.firstChild) lnNode.removeChild(lnNode.firstChild);
+                            lnNode.appendChild(xmlDoc.createElementNS(namespaces.a, "a:noFill"));
+                        } else {
+                            // lnがない場合は枠線なしなのでOK、あるいは明示的に noFill を追加してもいい
+                        }
+                    }
+
+                    // 3. マージン削除
+                    // wps:bodyPr の lIns, tIns, rIns, bIns を 0 に設定
+                    const bodyPrNode = evaluateXPath(".//wps:bodyPr", shapeNode) as Element;
+                    if (bodyPrNode) {
+                        bodyPrNode.setAttribute('lIns', '0');
+                        bodyPrNode.setAttribute('tIns', '0');
+                        bodyPrNode.setAttribute('rIns', '0');
+                        bodyPrNode.setAttribute('bIns', '0');
+                    }
+                }
+            }
+        }
+
+        // XMLを文字列に戻してzipに格納
+        const serializer = new XMLSerializer();
+        docXml = serializer.serializeToString(xmlDoc);
+        zip.file(docXmlPath, docXml);
+    }
+
+    // Image Module Options
+    const imageOptions = {
+        centered: false,
+        getImage: (tagValue: string) => {
+            // base64 string handling
+            const cleanBase64 = tagValue.replace(/^data:image\/(png|jpg|jpeg);base64,/, "");
+            return Uint8Array.from(atob(cleanBase64), c => c.charCodeAt(0));
+        },
+        getSize: () => {
+            // シェイプから抽出したサイズがあればそれを使用、なければデフォルト
+            if (portraitSize && portraitSize.width > 0 && portraitSize.height > 0) {
+                return [portraitSize.width, portraitSize.height];
+            }
+            return [150, 200]; // Fallback
+        }
+    };
+
+    const imageModule = new ImageModule(imageOptions);
+
     const parser = (tag: string) => {
         return {
             get: (scope: Record<string, unknown>) => {
-                const trimmedTag = tag.trim();
-                const dobMatch = trimmedTag.match(/^dob\s+["'](.+?)["']$/);
-                if (dobMatch) return formatCustomDate(resume.dob, dobMatch[1]);
+                // [n] を .n に置換して正規化する (ex: education[0].year -> education.0.year)
+                const trimmedTag = tag.trim().replace(/\[(\d+)\]/g, '.$1');
+
+                // 汎用日付フォーマット (tag "pattern")
+                // 例: {updated_raw "yyyy年mm月dd日"} -> 2024年01月01日
+                const formatMatch = trimmedTag.match(/^(\S+)\s+["'](.+?)["']$/);
+                if (formatMatch) {
+                    const key = formatMatch[1];
+                    const pattern = formatMatch[2];
+
+                    // 値の取得ロジック（再利用）
+                    let val: unknown = scope[key];
+                    if (key.indexOf(".") !== -1) {
+                        const parts = key.split(".");
+                        let v: unknown = scope;
+                        for (const part of parts) {
+                            if (v === null || v === undefined || typeof v !== 'object') {
+                                v = undefined;
+                                break;
+                            }
+                            v = (v as Record<string, unknown>)[part];
+                        }
+                        val = v;
+                    }
+
+                    if (typeof val === 'string' || typeof val === 'number' || val instanceof Date) {
+                        return formatCustomDate(String(val), pattern);
+                    }
+                    return ""; // 日付でない場合は空文字
+                }
 
                 if (trimmedTag.indexOf(".") !== -1) {
                     const parts = trimmedTag.split(".");
                     let value: unknown = scope;
                     for (const part of parts) {
-                        if (value && typeof value === 'object') {
-                            value = (value as Record<string, unknown>)[part];
+                        // valueがnull/undefined、またはオブジェクトでない場合はプロパティアクセス不可
+                        if (value === null || value === undefined || typeof value !== 'object') {
+                            return undefined;
                         }
+                        value = (value as Record<string, unknown>)[part];
                     }
                     return value;
                 }
@@ -48,7 +217,9 @@ export const generateWordBlob = async (resume: ResumeConfig, templateFile: File 
     const doc = new Docxtemplater(zip, {
         paragraphLoop: true,
         linebreaks: true,
-        parser: parser
+        modules: [imageModule],
+        parser: parser,
+        nullGetter: () => ""
     });
 
     const ageValue = calculateAge(resume.dob);
@@ -68,10 +239,73 @@ export const generateWordBlob = async (resume: ResumeConfig, templateFile: File 
         }
     }
 
+    const educationList: HistoryItem[] = resume.education.map(item => ({
+        id: item.id || `edu-${Math.random().toString(36).substr(2, 9)}`,
+        year: item.year,
+        month: item.month,
+        content: item.content
+    }));
+    if (educationList.length > 0 && options.isEducationEndMarker) {
+        educationList.push({ id: 'edu-end', year: '', month: '', content: '以上', content_align: 'right' });
+    }
+
+    const workList: HistoryItem[] = processHistory(resume.work_experience, 'work', options.isWorkCurrentMarker).map(item => ({
+        id: item.id || `work-${Math.random().toString(36).substr(2, 9)}`,
+        year: item.year,
+        month: item.month,
+        content: item.content
+    }));
+    if (workList.length > 0 && options.isWorkEndMarker) {
+        workList.push({ id: 'work-end', year: '', month: '', content: '以上', content_align: 'right' });
+    }
+
+    const certificateList: HistoryItem[] = resume.certificates.map(item => ({
+        id: item.id || `cert-${Math.random().toString(36).substr(2, 9)}`,
+        year: item.year,
+        month: item.month,
+        content: item.content
+    }));
+    if (certificateList.length > 0 && options.isCertificateEndMarker) {
+        certificateList.push({ id: 'cert-end', year: '', month: '', content: '以上', content_align: 'right' });
+    }
+
+    // 学歴・職歴の統合リストを作成
+    const historyList = buildCombinedHistory(resume, options);
+
+    // マーカー定数とヘルパー関数
+    const MARKER_CENTER = ':::CENTER:::';
+    const MARKER_RIGHT = ':::RIGHT:::';
+
+    const processListForAlignment = (list: HistoryItem[]) => {
+        return list.map(item => {
+            let content = item.content || '';
+            const align = item.content_align;
+
+            if (align === 'center') {
+                content = MARKER_CENTER + content;
+            } else if (align === 'right') {
+                content = MARKER_RIGHT + content;
+            }
+
+            return {
+                ...item,
+                content,
+                align,
+                isCenter: align === 'center',
+                isRight: align === 'right'
+            };
+        });
+    };
+
     const data = {
+        ...resume, // ユーザー定義の全フィールドを展開
         name: resume.name,
         name_kana: resume.name_kana,
-        dob: dobData,
+        portrait: resume.portrait,
+        gender: resume.gender,
+        updated: new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' }),
+        updated_raw: new Date().toISOString(),
+        dob: dobData, // dobはオブジェクトに変換されるため上書き
         age: ageValue,
         zip: resume.zip,
         address: resume.address,
@@ -88,24 +322,141 @@ export const generateWordBlob = async (resume: ResumeConfig, templateFile: File 
         spouse: resume.spouse,
         number_of_dependents: resume.number_of_dependents,
 
-        education: resume.education.map(item => ({
-            year: item.year,
-            month: item.month,
-            content: item.content
-        })),
-        work: processHistory(resume.work_experience, 'work', options.isWorkCurrentMarker).map(item => ({
-            year: item.year,
-            month: item.month,
-            content: item.content
-        })),
-        certificates: resume.certificates.map(item => ({
-            year: item.year,
-            month: item.month,
-            content: item.content
-        }))
+        // 各リストにアライメントマーカー付与処理を適用
+        education: processListForAlignment(educationList),
+        work: processListForAlignment(workList),
+        certificates: processListForAlignment(certificateList),
+        history: processListForAlignment(historyList)
     };
 
     doc.render(data);
+
+    // ユーザー要望対応: テンプレートを修正せずにアライメントを強制適用する (Post-processing)
+    // レンダリング後のXMLを操作し、マーカー（:::CENTER:::, :::RIGHT:::）が含まれる段落のアライメントを変更する
+    const outZip = doc.getZip();
+    const outDocXmlPath = 'word/document.xml';
+    let outDocXml = outZip.file(outDocXmlPath)?.asText();
+
+    if (outDocXml) {
+        // 画像展開処理: シェイプの中に生成された画像を、シェイプの親drawingに移動させてシェイプを削除する
+        // これにより、座標(anchor)は維持しつつ、シェイプ(wps:wsp)の属性(枠線や余白)を排除する
+        const domParser = new DOMParser();
+        const xmlDoc = domParser.parseFromString(outDocXml, "application/xml");
+
+        const namespacesPost = {
+            w: "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+            wps: "http://schemas.microsoft.com/office/word/2010/wordprocessingShape",
+            a: "http://schemas.openxmlformats.org/drawingml/2006/main",
+            pic: "http://schemas.openxmlformats.org/drawingml/2006/picture",
+            wp: "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+        };
+
+        const evaluateXPathPost = (xpath: string, context: Node) => {
+            return xmlDoc.evaluate(xpath, context, (prefix) => namespacesPost[prefix as keyof typeof namespacesPost] || null, 9, null).singleNodeValue;
+        };
+
+        // シェイプ(wps:wsp)を含み、かつその中に画像(pic:pic)を含む w:drawing を探す
+        const drawings = xmlDoc.evaluate("//w:drawing[descendant::wps:wsp[descendant::pic:pic]]", xmlDoc, (prefix) => namespacesPost[prefix as keyof typeof namespacesPost] || null, 7, null);
+
+        for (let i = 0; i < drawings.snapshotLength; i++) {
+            const outerDrawing = drawings.snapshotItem(i) as Element;
+
+            // 内部の画像(pic:pic)を取得
+            const pic = evaluateXPathPost(".//pic:pic", outerDrawing) as Element;
+            if (pic) {
+                // 画像のサイズ(wp:extent)を取得 (内部で生成されたdrawing/inline/extentを探す)
+                // picの親を遡って wp:inline/wp:extent を探すのが確実
+                let current = pic.parentNode;
+                let width = 0, height = 0;
+                while (current && current !== outerDrawing) {
+                    if (current.nodeName === 'wp:inline' || current.nodeName === 'wp:anchor') {
+                        const extent = evaluateXPathPost("./wp:extent", current) as Element;
+                        if (extent) {
+                            width = parseInt(extent.getAttribute('cx') || '0');
+                            height = parseInt(extent.getAttribute('cy') || '0');
+                        }
+                        break;
+                    }
+                    current = current.parentNode;
+                }
+
+                if (width > 0 && height > 0) {
+                    // 外側のdrawingのサイズ(wp:extent)を更新
+                    const outerExtent = evaluateXPathPost(".//wp:extent", outerDrawing) as Element;
+                    if (outerExtent) {
+                        outerExtent.setAttribute('cx', String(width));
+                        outerExtent.setAttribute('cy', String(height));
+                    }
+                }
+
+                // グラフィックデータ(a:graphicData)を取得して差し替える
+                const graphicData = evaluateXPathPost(".//a:graphic/a:graphicData", outerDrawing) as Element;
+                if (graphicData) {
+                    // URI変更
+                    graphicData.setAttribute('uri', "http://schemas.openxmlformats.org/drawingml/2006/picture");
+
+                    // 中身を空にして pic:pic を追加
+                    while (graphicData.firstChild) graphicData.removeChild(graphicData.firstChild);
+                    graphicData.appendChild(pic);
+                }
+            }
+        }
+
+        const serializer = new XMLSerializer();
+        outDocXml = serializer.serializeToString(xmlDoc);
+
+        // 段落単位で分割マッチさせる正規表現 (非貪欲マッチ)
+        const paragraphRegex = /<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g;
+
+        outDocXml = outDocXml.replace(paragraphRegex, (paragraphXml) => {
+            // テキスト要素の中身を抽出して結合し、マーカーを確認
+            const rawText = (paragraphXml.match(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g) || [])
+                .map(t => t.replace(/<[^>]+>/g, ''))
+                .join('');
+
+            let alignType = '';
+            let marker = '';
+
+            if (rawText.includes(MARKER_CENTER)) {
+                alignType = 'center';
+                marker = MARKER_CENTER;
+            } else if (rawText.includes(MARKER_RIGHT)) {
+                alignType = 'right';
+                marker = MARKER_RIGHT;
+            }
+
+            if (alignType) {
+                // 1. アライメント適用
+                let newParagraphXml = paragraphXml;
+                if (newParagraphXml.includes('<w:pPr>')) {
+                    if (newParagraphXml.includes('<w:jc ')) {
+                        // 既存のjcを置換
+                        newParagraphXml = newParagraphXml.replace(/<w:jc\s+w:val="[^"]*"\s*\/>/g, `<w:jc w:val="${alignType}"/>`);
+                    } else {
+                        // pPrの中にjcを追加 (末尾に追加)
+                        newParagraphXml = newParagraphXml.replace('</w:pPr>', `<w:jc w:val="${alignType}"/></w:pPr>`);
+                    }
+                } else {
+                    // pPr自体がない場合、作成して挿入 (w:pの直後)
+                    const pTagMatch = newParagraphXml.match(/^<w:p(?:\s[^>]*)?>/);
+                    if (pTagMatch) {
+                        newParagraphXml = pTagMatch[0] + `<w:pPr><w:jc w:val="${alignType}"/></w:pPr>` + newParagraphXml.substring(pTagMatch[0].length);
+                    }
+                }
+
+                // 2. マーカー削除
+                // XMLタグをまたいでマーカーが存在する可能性は低い（一括挿入しているため）が、
+                // 単純な string replace で対応する。wordxml上ではエスケープされない文字種(:::)を選んでいるため安全。
+                // ただし、分割されて <w:t>:::</w:t><w:t>CENTER:::</w:t> のようになっている場合は除去漏れするリスクがある。
+                // ここでは docxtemplater が挿入した直後なので、一つの <w:t> に収まっていると期待して単純置換する。
+                // もし分割されていても、XMLタグを含まない状態で replace すればよいが、構造維持のため xml全体でのreplaceを行う。
+                return newParagraphXml.replace(marker, '');
+            }
+            return paragraphXml;
+        });
+
+        outZip.file(outDocXmlPath, outDocXml);
+    }
 
     return doc.getZip().generate({
         type: "blob",
