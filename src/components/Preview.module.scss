@@ -1,5 +1,8 @@
-/* PreviewMUI.module.scss */
-
+/**
+ * Resumaker
+ * (c) 2026 ayeci
+ * Released under the MIT License.
+ */
 /* フォント設定 */
 .serifFont {
     font-family: "Noto Serif JP", serif;
@@ -20,12 +23,47 @@
     margin: 0 auto;
     padding: 1rem;
 
+    /* 拡大縮小とタッチ操作の制御 */
+    transform: scale(var(--preview-scale, 1));
+    transform-origin: top left;
+    will-change: transform;
+    touch-action: pan-x pan-y pinch-zoom;
+    /* ピンチ操作のためにデフォルトズームを抑制 */
+
     @media print {
-        display: block;
-        width: auto;
-        padding: 0;
-        margin: 0;
+        display: block !important;
+        width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        transform: none !important;
+        box-shadow: none !important;
+        touch-action: auto !important;
+        height: auto !important;
+        overflow: visible !important;
+        position: static !important;
     }
+}
+
+.templateWrapper {
+    width: 100%;
+    height: calc(100vh - 120px);
+    min-height: 600px;
+    background-color: white;
+    overflow: hidden;
+    /* 二重スクロール防止 */
+
+    @media print {
+        height: auto !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+        position: static !important;
+    }
+}
+
+.templateMode {
+    width: 100%;
+    min-width: 0;
+    padding: 0 !important;
 }
 
 .controls {
@@ -49,16 +87,23 @@
     margin-bottom: 2rem;
     background-color: white;
     box-sizing: border-box;
+    font-family: "Noto Serif JP", serif;
+    transform: translateZ(0);
+    /* ハードウェア加速：テキストのぼやけ防止 */
 
     @media print {
-        width: auto;
-        min-height: 0;
-        margin: 0;
-        padding: 0;
+        width: 100% !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
         box-shadow: none !important;
-        border: none;
-        margin-bottom: 0;
+        border: none !important;
+        margin-bottom: 0 !important;
         break-after: page;
+        transform: none !important;
+        height: auto !important;
+        overflow: visible !important;
+        position: static !important;
 
         &:last-child {
             break-after: auto;

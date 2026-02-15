@@ -59,6 +59,8 @@ export interface ResumeContextType {
     portraitFile: File | null;
     /** 証明写真ファイルを設定する */
     setPortraitFile: (file: File | null) => void;
+    /** 現在の内容に基づいてドキュメントを再フォーマットする */
+    reformat: () => Promise<void>;
     resetToSample: () => void;
 }
 

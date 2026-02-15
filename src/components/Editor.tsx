@@ -3,31 +3,33 @@
  * (c) 2026 ayeci
  * Released under the MIT License.
  */
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useRef, useState } from 'react';
 import Editor from '@monaco-editor/react';
-import yaml from 'js-yaml';
 import {
     Box,
     Typography,
     IconButton,
     Tooltip,
-    Avatar,
     ToggleButton,
-    ToggleButtonGroup
+    ToggleButtonGroup,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogContentText,
+    DialogTitle,
+    Button
 } from '@mui/material';
 import {
     FileCode,
-    Camera,
-    X,
     AlignLeft,
     FileSymlink
 } from 'lucide-react';
 import { useResume } from '../context/ResumeHooks';
+import { PortraitUpload } from './PortraitUpload';
 import styles from './Editor.module.scss';
 import { resumeSchema } from '../constants/resumeSchema';
 import { loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
-import { Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button } from '@mui/material';
 
 // monaco-yaml のためにローカルの monaco インスタンスを使用するように設定
 loader.config({ monaco });
@@ -43,14 +45,11 @@ monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
     }]
 });
 
-
-
 /**
  * JSON/YAML形式での直接編集、ファイルインポート、証明写真のアップロード機能を提供する
  */
 export const ResumeEditor = () => {
-    const { resume, mode, setMode, rawText, setRawText, setPortraitFile, parseError, resetToSample } = useResume();
-    const portraitInputRef = useRef<HTMLInputElement>(null);
+    const { mode, setMode, rawText, setRawText, parseError, resetToSample, reformat } = useResume();
 
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
     const [reloadDialogOpen, setReloadDialogOpen] = useState(false);
@@ -62,6 +61,9 @@ export const ResumeEditor = () => {
     };
     const handleReloadCancel = () => setReloadDialogOpen(false);
 
+    // モバイル判定（App.tsx と同期させるために 768px を閾値とする）
+    const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+
     /**
      * エディタの内容が変更された際のハンドラ
      * ユーザー入力による変更のみをContextに反映させる。
@@ -69,7 +71,6 @@ export const ResumeEditor = () => {
      */
     const handleEditorChange = (value: string | undefined, event: monaco.editor.IModelContentChangedEvent) => {
         // プログラムによる変更（isFlush）の場合は、Contextへの書き戻しを行わない
-        // これにより、データロード時の意図しない上書き（キャッシュ戻り）を防ぐ
         if (event.isFlush) {
             return;
         }
@@ -84,133 +85,46 @@ export const ResumeEditor = () => {
 
     /**
      * エディタの内容を手動でフォーマット（整形）する
-     * JSONモード: Monaco Editor標準のフォーマッタを使用
-     * YAMLモード: js-yamlを使用してダンプし直し、スペース2つのインデントを適用する
-     * （monaco-yamlのWorkerが無効化されているため、手動実装している）
      */
     const handleFormat = async () => {
-        if (editorRef.current) {
-
-            if (mode === 'yaml') {
-                // monaco-yamlが無効化されているため、js-yamlを使用して手動フォーマットを行う
-                try {
-                    const currentValue = editorRef.current.getValue();
-                    const parsed = yaml.load(currentValue, { schema: yaml.JSON_SCHEMA });
-                    if (parsed) {
-                        const formatted = yaml.dump(parsed, {
-                            lineWidth: -1,
-                            noRefs: true,
-                            quotingType: '"',
-                            indent: 2
-                        });
-                        // カーソル位置を維持しようとすると複雑になるため、単純に値を更新する
-                        // pushEditOperationsを使うとUndoスタックが維持される
-                        const model = editorRef.current.getModel();
-                        if (model) {
-                            editorRef.current.pushUndoStop();
-                            editorRef.current.executeEdits('format', [{
-                                range: model.getFullModelRange(),
-                                text: formatted,
-                                forceMoveMarkers: true
-                            }]);
-                            editorRef.current.pushUndoStop();
-                        }
-                    }
-                } catch (e) {
-                    console.error('YAML Format failed:', e);
-                    setStatusMessage('Format Failed');
-                    setTimeout(() => setStatusMessage(null), 2000);
-                    return;
-                }
-            } else {
-                // JSONの場合は組み込みのFormatterを使用
-                await editorRef.current.getAction('editor.action.formatDocument')?.run();
-            }
-
-            setStatusMessage('Formatted');
-            setTimeout(() => setStatusMessage(null), 2000);
-        } else {
-            console.warn('Editor instance not found');
-        }
-    };
-
-
-
-    const handlePortraitClick = () => {
-        portraitInputRef.current?.click();
-    };
-
-    const handlePortraitChange = (e: ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            setPortraitFile(file);
-        }
-        // 同じファイルを再度アップロードできるように入力をリセット
-        e.target.value = '';
-    };
-
-    const handleDeletePortrait = () => {
-        setPortraitFile(null);
-        // inputの状態もリセットしておく
-        if (portraitInputRef.current) {
-            portraitInputRef.current.value = '';
-        }
+        // コンテキストの整形関数を使用（エディタインスタンス外からの呼び出しにも対応）
+        await reformat();
+        setStatusMessage('整形完了');
+        setTimeout(() => setStatusMessage(null), 2000);
     };
 
     return (
         <Box className={styles.editorRoot}>
-            <Box className={styles.editorToolbar}>
-                <Box className={styles.editorLabelSection}>
-                    <FileCode size={18} color="#64748b" />
-                    <ToggleButtonGroup
-                        value={mode}
-                        exclusive
-                        onChange={(_, newMode) => newMode && setMode(newMode)}
-                        size="small"
-                        sx={{ height: 24, ml: 1 }}
-                    >
-                        <ToggleButton value="yaml" sx={{ fontSize: 10, px: 1 }}>YAML</ToggleButton>
-                        <ToggleButton value="json" sx={{ fontSize: 10, px: 1 }}>JSON</ToggleButton>
-                    </ToggleButtonGroup>
-                </Box>
-                <Box className={styles.toolbarActions}>
-                    <Tooltip title="ドキュメントを整形">
-                        <IconButton size="small" onClick={handleFormat} className={styles.toolbarIconBtn}>
-                            <AlignLeft size={18} />
-                        </IconButton>
-                    </Tooltip>
-                    <Box className={styles.portraitWrapper}>
-                        {resume.portrait ? (
-                            <Box sx={{ position: 'relative' }}>
-                                <Avatar
-                                    src={resume.portrait}
-                                    variant="rounded"
-                                    className={styles.portraitAvatar}
-                                    onClick={handlePortraitClick}
-                                />
-                                <IconButton
-                                    size="small"
-                                    className={styles.portraitDeleteBtn}
-                                    onClick={handleDeletePortrait}
-                                >
-                                    <X size={10} />
-                                </IconButton>
-                            </Box>
-                        ) : (
-                            <Tooltip title="写真をアップロード">
-                                <IconButton size="small" onClick={handlePortraitClick} className={styles.toolbarIconBtn}>
-                                    <Camera size={18} />
-                                </IconButton>
-                            </Tooltip>
-                        )}
+            {!isMobile && (
+                <Box className={styles.editorToolbar}>
+                    <Box className={styles.editorLabelSection}>
+                        <FileCode size={18} color="#64748b" />
+                        <ToggleButtonGroup
+                            value={mode}
+                            exclusive
+                            onChange={(_, newMode) => newMode && setMode(newMode)}
+                            size="small"
+                            sx={{ height: 24, ml: 1 }}
+                        >
+                            <ToggleButton value="yaml" sx={{ fontSize: 10, px: 1 }}>YAML</ToggleButton>
+                            <ToggleButton value="json" sx={{ fontSize: 10, px: 1 }}>JSON</ToggleButton>
+                        </ToggleButtonGroup>
                     </Box>
-                    <Tooltip title="サンプルデータの再読み込み">
-                        <IconButton size="small" onClick={handleReloadClick} className={styles.toolbarIconBtn}>
-                            <FileSymlink size={18} />
-                        </IconButton>
-                    </Tooltip>
+                    <Box className={styles.toolbarActions}>
+                        <Tooltip title="データ整形">
+                            <IconButton size="small" onClick={handleFormat} className={styles.toolbarIconBtn}>
+                                <AlignLeft size={18} />
+                            </IconButton>
+                        </Tooltip>
+                        <PortraitUpload variant="icon" />
+                        <Tooltip title="サンプルデータ再読込">
+                            <IconButton size="small" onClick={handleReloadClick} className={styles.toolbarIconBtn}>
+                                <FileSymlink size={18} />
+                            </IconButton>
+                        </Tooltip>
+                    </Box>
                 </Box>
-            </Box>
+            )}
 
             <Dialog
                 open={reloadDialogOpen}
@@ -219,7 +133,7 @@ export const ResumeEditor = () => {
                 aria-describedby="alert-dialog-description"
             >
                 <DialogTitle id="alert-dialog-title">
-                    {"サンプルデータの再読み込み"}
+                    {"サンプルデータ再読込"}
                 </DialogTitle>
                 <DialogContent>
                     <DialogContentText id="alert-dialog-description">
@@ -253,11 +167,9 @@ export const ResumeEditor = () => {
                         folding: true,
                         lineDecorationsWidth: 0,
                         lineNumbersMinChars: 0,
-                        // YAML用にスペースインデントを強制
                         insertSpaces: true,
                         tabSize: 2,
                         detectIndentation: false,
-                        // 空行のインデントが削除されるのを防ぐ（マルチライン文字列対策）
                         trimAutoWhitespace: false,
                     }}
                 />
@@ -274,16 +186,6 @@ export const ResumeEditor = () => {
                     </Typography>
                 )}
             </Box>
-
-
-            <input
-                type="file"
-                title="ポートレート写真を指定"
-                ref={portraitInputRef}
-                className={styles.hiddenInput}
-                accept="image/*"
-                onChange={handlePortraitChange}
-            />
         </Box>
     );
 };

@@ -13,6 +13,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 import { DEFAULT_RESUME, type ResumeConfig, type HistoryItem } from '../types/resume';
+import { generateUUID } from './uuid';
 
 /**
  * テキストデータをResumeConfigにマッピングする（簡易実装）
@@ -112,16 +113,16 @@ const normalizeHistoryItem = (item: string | Partial<HistoryItem>): HistoryItem 
     if (typeof item !== 'string') {
         if (typeof item === 'object' && item !== null) {
             return {
-                id: (item as HistoryItem).id || crypto.randomUUID(),
+                id: (item as HistoryItem).id || generateUUID(),
                 ...item
             } as HistoryItem;
         }
-        return { id: crypto.randomUUID(), content: String(item) } as HistoryItem;
+        return { id: generateUUID(), content: String(item) } as HistoryItem;
     }
 
     const parts = item.split('/').map(p => p.trim());
     const result: HistoryItem = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         content: ''
     };
 

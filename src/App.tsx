@@ -3,14 +3,16 @@
  * (c) 2026 ayeci
  * Released under the MIT License.
  */
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Box, AppBar, Toolbar, Typography, Button, IconButton, ToggleButton, ToggleButtonGroup, CircularProgress, Menu, MenuItem, ButtonGroup, Checkbox, ListItemText, ListItemIcon, Divider } from '@mui/material';
-import { Settings, Printer, ChevronLeft, ChevronRight, FileText, LayoutTemplate, FileUp, Upload, ChevronDown, Eye, EyeOff, Github, Shield } from 'lucide-react';
+import { Settings, Printer, ChevronLeft, ChevronRight, FileText, LayoutTemplate, FileUp, Upload, ChevronDown, Eye, EyeOff, Github, Shield, Menu as MenuIcon, Edit3 } from 'lucide-react';
 import { ResumeEditor } from './components/Editor';
 import { Preview } from './components/Preview';
 import { useResume } from './context/ResumeHooks';
 import { generateWordBlob, generateExcelBlob } from './utils/exporter';
 import { ExportOptionDialog } from './components/ExportOptionDialog';
+import { MobileMenu } from './components/MobileMenu';
+import { PortraitUpload } from './components/PortraitUpload';
 import styles from './App.module.scss';
 import clsx from 'clsx';
 import { dump } from 'js-yaml';
@@ -29,15 +31,27 @@ function App() {
   const [showSource, setShowSource] = useState(true);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [templateMenuAnchorEl, setTemplateMenuAnchorEl] = useState<null | HTMLElement>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileView, setMobileView] = useState<'editor' | 'preview'>('editor');
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
   const isResizing = useRef(false);
   const templateInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
+  // ウィンドウサイズ監視
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth <= 768;
+      setIsMobile(mobile);
+      if (!mobile && !showSource) setShowSource(true);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [showSource]);
+
   // プレビュー表示対象はチェックが入っているもののみ
   const visibleTemplates = templates.filter(t => t.checked);
-  // 現在選択中のIDが可視リストに含まれていない場合、可視リストの先頭を選択する等の配慮が必要だが
-  // ユーザー操作でチェックを外した瞬間に切り替わるのも自然
-  // ここではシンプルに visibleTemplates をプレビューのソースとして使う
 
   const handleMenuClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);
@@ -169,8 +183,8 @@ function App() {
               variant="outlined"
               size="small"
               startIcon={<FileUp size={16} />}
-              endIcon={<ChevronDown size={16} />}
-              onClick={handleTemplateMenuOpen}
+              endIcon={templates.length > 0 ? <ChevronDown size={16} /> : null}
+              onClick={(e) => templates.length === 0 ? handleLoadNewTemplate() : handleTemplateMenuOpen(e)}
               sx={{ height: '36.5px' }}
             >
               テンプレート読込
@@ -220,39 +234,44 @@ function App() {
       </AppBar>
 
       <Box className={styles.mainContent}>
-        {showSource && (
+        {(!isMobile || mobileView === 'editor') && showSource && (
           <>
-            <Box className={clsx(styles.editorPane, "print-hidden")} style={{ width: editorWidth }}><ResumeEditor /></Box>
-            <Box className={clsx(styles.resizeHandle, "print-hidden", isResizing.current ? styles.dragging : styles.default)} onMouseDown={startResizing} />
+            <Box className={clsx(styles.editorPane, "print-hidden")} style={{ width: isMobile ? '100%' : editorWidth }}>
+              <ResumeEditor />
+            </Box>
+            {!isMobile && (
+              <Box className={clsx(styles.resizeHandle, "print-hidden", isResizing.current ? styles.dragging : styles.default)} onMouseDown={startResizing} />
+            )}
           </>
         )}
-        <Box className={styles.previewPane}>
-          {previewMode === 'template' && visibleTemplates.length > 1 && (
-            <>
-              <IconButton className="template-nav-btn template-nav-prev print-hidden" onClick={() => {
-                const i = visibleTemplates.findIndex(t => t.id === selectedTemplateId);
-                const prevIndex = i === -1 ? 0 : (i - 1 + visibleTemplates.length) % visibleTemplates.length;
-                setSelectedTemplateId(visibleTemplates[prevIndex].id);
-              }}><ChevronLeft /></IconButton>
-              <IconButton className="template-nav-btn template-nav-next print-hidden" onClick={() => {
-                const i = visibleTemplates.findIndex(t => t.id === selectedTemplateId);
-                const nextIndex = i === -1 ? 0 : (i + 1) % visibleTemplates.length;
-                setSelectedTemplateId(visibleTemplates[nextIndex].id);
-              }}><ChevronRight /></IconButton>
-            </>
-          )}
-          <Box className={styles.previewScrollArea}>
-            {/* 
-               選択中のテンプレートが visibleTemplates に含まれていない場合、
-               visibleTemplates[0] を表示するなどのフォールバックが必要だが、
-               Previewコンポーネント側で selectedTemplateId を参照しているため、
-               ここではナビゲーションボタンの出し分けのみ制御している。
-               Preview側も修正が必要かもしれないが、まずはボタン修正。
-             */}
-            <Preview />
+        {(!isMobile || mobileView === 'preview') && (
+          <Box className={styles.previewPane}>
+            {previewMode === 'template' && visibleTemplates.length > 1 && (
+              <>
+                <div className={styles.templateNavPrevContainer}>
+                  <IconButton className={clsx(styles.templateNavBtn, styles.templateNavPrev, "print-hidden")} onClick={() => {
+                    const i = visibleTemplates.findIndex(t => t.id === selectedTemplateId);
+                    const prevIndex = i === -1 ? 0 : (i - 1 + visibleTemplates.length) % visibleTemplates.length;
+                    setSelectedTemplateId(visibleTemplates[prevIndex].id);
+                  }}><ChevronLeft /></IconButton>
+                </div>
+                <div className={styles.templateNavNextContainer}>
+                  <IconButton className={clsx(styles.templateNavBtn, styles.templateNavNext, "print-hidden")} onClick={() => {
+                    const i = visibleTemplates.findIndex(t => t.id === selectedTemplateId);
+                    const nextIndex = i === -1 ? 0 : (i + 1) % visibleTemplates.length;
+                    setSelectedTemplateId(visibleTemplates[nextIndex].id);
+                  }}><ChevronRight /></IconButton>
+                </div>
+              </>
+            )}
+            <Box className={clsx(styles.previewScrollArea, previewMode === 'template' && styles.templateScroll)}>
+              <Preview />
+            </Box>
           </Box>
-        </Box>
+        )}
       </Box>
+
+      {/* PC版フッター */}
       <Box component="footer" className={clsx(styles.appFooter, "print-hidden")}>
         <a href="https://github.com/AyeBee/Resumaker" target="_blank" rel="noopener noreferrer">
           <Github size={16} />
@@ -262,7 +281,44 @@ function App() {
           <Shield size={16} />
           <span>Privacy Policy</span>
         </a>
+        <Typography variant="caption" sx={{ color: 'inherit' }}>© ayeci</Typography>
       </Box>
+
+      {/* モバイル版フッター（タブバー） */}
+      <Box className={clsx(styles.mobileFooter, "print-hidden")}>
+        <PortraitUpload variant="tab" />
+        <Box
+          className={clsx(styles.mobileTabItem, mobileView === 'editor' && styles.active)}
+          onClick={() => setMobileView('editor')}
+        >
+          <Edit3 size={24} />
+          <Typography variant="caption">エディタ</Typography>
+        </Box>
+        <Box
+          className={clsx(styles.mobileTabItem, mobileView === 'preview' && styles.active)}
+          onClick={() => setMobileView('preview')}
+        >
+          <Eye size={24} />
+          <Typography variant="caption">プレビュー</Typography>
+        </Box>
+        <Box className={styles.mobileTabItem} onClick={() => setMobileMenuOpen(true)}>
+          <MenuIcon size={24} />
+          <Typography variant="caption">メニュー</Typography>
+        </Box>
+      </Box>
+
+      {/* モバイルメニューオーバーレイ */}
+      {mobileMenuOpen && (
+        <MobileMenu
+          onClose={() => setMobileMenuOpen(false)}
+          onPrint={() => window.print()}
+          onExport={handleExportClick}
+          onImport={() => importInputRef.current?.click()}
+          onLoadTemplate={() => templateInputRef.current?.click()}
+          onOpenSettings={() => setOptionDialogOpen(true)}
+        />
+      )}
+
       <ExportOptionDialog open={optionDialogOpen} onClose={() => setOptionDialogOpen(false)} />
       <input type="file" title="テンプレートをロード" ref={templateInputRef} className={styles.hiddenInput} accept=".docx,.xlsx" multiple onChange={(e) => {
         if (e.target.files && e.target.files.length > 0) {
