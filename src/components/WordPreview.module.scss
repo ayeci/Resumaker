@@ -1,13 +1,22 @@
+/**
+ * Resumaker
+ * (c) 2026 ayeci
+ * Released under the MIT License.
+ */
 .wordPreviewContainer {
     width: 100%;
     height: 100%;
     overflow: auto;
     border: 1px solid #ccc;
     background-color: #f0f0f0;
-}
 
-div[class="fortune-col-header-wrap"] {
-    display: none;
+    @media print {
+        height: auto !important;
+        overflow: visible !important;
+        position: static !important;
+        background-color: white !important;
+        border: none !important;
+    }
 }
 
 .loading {
@@ -20,6 +29,21 @@ div[class="fortune-col-header-wrap"] {
 }
 
 .contentContainer {
-    padding: 20px;
     min-height: 100%;
+    padding: 0;
+
+    @media print {
+        height: auto !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+        position: static !important;
+    }
+}
+
+@media print {
+    div[class="docx-preview-content-wrapper"] {
+        background-color: transparent !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
 }

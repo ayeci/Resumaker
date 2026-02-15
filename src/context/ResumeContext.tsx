@@ -9,6 +9,7 @@ import { DEFAULT_RESUME, type ResumeConfig, DEFAULT_EXPORT_OPTIONS, type ExportO
 import { ResumeContext, type EditorMode } from './ResumeHooks';
 import { normalizeResumeData } from '../utils/importer';
 import sampleYaml from '../../example/sample.yaml?raw'; // サンプルデータを読み込む
+import { generateUUID } from '../utils/uuid';
 
 /**
  * オブジェクトから空の値（null, undefined, 空文字）を再帰的に削除する
@@ -196,7 +197,7 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
             else if (file.name.endsWith('.xlsx')) format = 'excel';
             if (format === 'other') continue;
             const buffer = await file.arrayBuffer();
-            const entry: TemplateEntry = { id: crypto.randomUUID(), file, arrayBuffer: buffer, name: file.name, format: format as 'word' | 'excel', checked: true };
+            const entry: TemplateEntry = { id: generateUUID(), file, arrayBuffer: buffer, name: file.name, format: format as 'word' | 'excel', checked: true };
             newEntries.push(entry);
             lastId = entry.id;
             lastFormat = format;
@@ -233,6 +234,34 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
         });
     };
     const handleSetResume = (r: ResumeConfig) => importData(r, mode);
+
+    /**
+     * 現在のエディタ上のテキスト（rawText）を現在のモードに基づいて再フォーマットする
+     */
+    const reformat = async () => {
+        try {
+            let currentData: any;
+            if (mode === 'json') {
+                currentData = JSON.parse(rawText);
+                setRawText(JSON.stringify(currentData, null, 2));
+            } else {
+                currentData = yaml.load(rawText, { schema: yaml.JSON_SCHEMA });
+                if (currentData) {
+                    const formatted = yaml.dump(currentData, {
+                        lineWidth: -1,
+                        noRefs: true,
+                        quotingType: '"',
+                        indent: 2
+                    });
+                    setRawText(formatted);
+                }
+            }
+            setParseError(null);
+        } catch (e) {
+            console.error('Reformat failed:', e);
+            setParseError({ message: '整形に失敗しました: ' + (e instanceof Error ? e.message : String(e)) });
+        }
+    };
 
     /**
      * エディタのモード（JSON/YAML）を切り替える
@@ -306,7 +335,7 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
 
     return (
         <ResumeContext.Provider value={{
-            resume, setResume: handleSetResume, rawText, setRawText: handleSetRawText, mode, setMode: handleSetMode, parseError, importData,
+            resume, setResume: handleSetResume, rawText, setRawText: handleSetRawText, mode, setMode: handleSetMode, parseError, importData, reformat,
             sourceFormat, templates: templateFiles, addTemplate: async (f, _fm) => addTemplates([f]), addTemplates, removeTemplate,
             toggleTemplateCheck, selectedTemplateId, setSelectedTemplateId, exportOptions, setExportOptions, previewMode, setPreviewMode,
             portraitFile, setPortraitFile: handleSetPortraitFile, resetToSample
