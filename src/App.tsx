@@ -36,7 +36,9 @@ function App() {
   const [templateMenuAnchorEl, setTemplateMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileView, setMobileView] = useState<'editor' | 'preview'>('editor');
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);// ★ 1. 文字サイズの状態をここで管理（初期値14px）
+  // モバイル判定: 縦向き768px以下 or 横向き900px以下
+  const checkMobile = () => window.innerWidth <= 768 || (window.innerWidth <= 900 && window.matchMedia('(orientation: landscape)').matches);
+  const [isMobile, setIsMobile] = useState(checkMobile());// ★ 1. 文字サイズの状態をここで管理（初期値14px）
   const [editorFontSize, setEditorFontSize] = useState(14);
 
   const isResizing = useRef(false);
@@ -99,7 +101,7 @@ function App() {
   // ウィンドウサイズ監視
   useEffect(() => {
     const handleResize = () => {
-      const mobile = window.innerWidth <= 768;
+      const mobile = checkMobile();
       setIsMobile(mobile);
       if (!mobile && !showSource) setShowSource(true);
     };

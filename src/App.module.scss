@@ -108,6 +108,11 @@
     @media (max-width: 768px) {
         display: none !important;
     }
+
+    /* 横向きモバイルでもヘッダーを非表示 */
+    @media (max-width: 900px) and (orientation: landscape) {
+        display: none !important;
+    }
 }
 
 .headerToolbar {
@@ -133,6 +138,13 @@
     @media (max-width: 768px) {
         height: calc(100dvh - var(--mobile-footer-height));
         flex-direction: column;
+    }
+
+    /* 横向きモバイル: フッターが左に来るのでその分左にオフセット */
+    @media (max-width: 900px) and (orientation: landscape) {
+        height: 100dvh;
+        margin-left: var(--mobile-footer-height);
+        flex-direction: row;
     }
 
     @media print {
@@ -293,6 +305,11 @@
     @media (max-width: 768px) {
         display: none !important;
     }
+
+    /* 横向きモバイルでもPC版フッターを非表示 */
+    @media (max-width: 900px) and (orientation: landscape) {
+        display: none !important;
+    }
 }
 
 /* モバイル専用フッター */
@@ -310,17 +327,24 @@
         align-items: center;
     }
 
-    /* スマホ横向き（Landscape） */
+    /* スマホ横向き（Landscape）: 左サイドに縦配置 */
     @media (max-width: 900px) and (orientation: landscape) {
+        display: flex;
         position: fixed;
-        right: 0;
+        left: 0;
         top: 0;
         bottom: 0;
         width: var(--mobile-footer-height);
         height: 100dvh;
         flex-direction: column;
         border-top: none;
-        border-left: 1px solid #e5e7eb;
+        border-right: 1px solid #e5e7eb;
+
+        :global {
+            .MuiTypography-caption {
+                font-size: 0.5rem !important;
+            }
+        }
     }
 }
 
