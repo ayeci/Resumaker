@@ -3,6 +3,7 @@
  * (c) 2026 ayeci
  * Released under the MIT License.
  */
+
 import { useState, type ReactNode, useRef } from 'react';
 import yaml from 'js-yaml';
 import { DEFAULT_RESUME, type ResumeConfig, DEFAULT_EXPORT_OPTIONS, type ExportOptions, type TemplateEntry } from '../types/resume';
@@ -26,12 +27,12 @@ const removeEmptyProperties = (obj: any): any => {
         Object.keys(obj).forEach(key => {
             const val = removeEmptyProperties(obj[key]);
             if (val !== null && val !== undefined && val !== '') {
-                // 再帰的に空のオブジェクトになった場合も削除したい場合はここを調整
-                // 現在は { nested: {} } のように空オブジェクトは残る仕様
-                // もし { year: "" } -> {} となり、それを親から消したいなら:
+                //MEMO: 再帰的に空のオブジェクトになった場合も削除したい場合はここを調整
+                //MEMO: 現在は { nested: {} } のように空オブジェクトは残る仕様
+                //MEMO: もし { year: "" } -> {} となり、それを親から消したいなら:
                 if (typeof val === 'object' && !Array.isArray(val) && Object.keys(val).length === 0) {
-                    // 厳密なクリーンアップが必要な場合は空のオブジェクトを無視する
-                    // ただし、空のオブジェクトが有効な場合もある（厳密な構造など）。履歴書の場合、通常は維持しても削除しても問題なし。
+                    //MEMO: 厳密なクリーンアップが必要な場合は空のオブジェクトを無視する
+                    //MEMO: ただし、空のオブジェクトが有効な場合もある（厳密な構造など）。履歴書の場合、通常は維持しても削除しても問題なし。
                 }
                 newObj[key] = val;
             }

@@ -3,6 +3,7 @@
  * (c) 2026 ayeci
  * Released under the MIT License.
  */
+
 import { createContext, useContext } from 'react';
 import type { ResumeConfig, TemplateEntry, ExportOptions } from '../types/resume';
 

@@ -3,6 +3,7 @@
  * (c) 2026 ayeci
  * Released under the MIT License.
  */
+
 import PizZip from 'pizzip';
 import Docxtemplater from 'docxtemplater';
 import { type ResumeConfig, DEFAULT_RESUME, type HistoryItem, type ExportOptions, DEFAULT_EXPORT_OPTIONS } from "../types/resume";

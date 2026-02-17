@@ -3,6 +3,7 @@
  * (c) 2026 ayeci
  * Released under the MIT License.
  */
+
 import React, { useRef, type ChangeEvent } from 'react';
 import { Box, Avatar, IconButton, Tooltip, Typography } from '@mui/material';
 import { Camera, X } from 'lucide-react';
