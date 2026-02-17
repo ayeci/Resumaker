@@ -3,22 +3,39 @@
  * (c) 2026 ayeci
  * Released under the MIT License.
  */
+
 import React, { useEffect, useRef, useState } from 'react';
 import { renderAsync } from 'docx-preview';
 import type { ResumeConfig, ExportOptions } from '../types/resume';
 import { generateWordBlob } from '../utils/exporter';
 import styles from './WordPreview.module.scss';
 
-interface Props {
+interface WordPreviewProps {
     templateBuffer: ArrayBuffer;
     resume: ResumeConfig;
     options: ExportOptions;
+    onSizeChange?: (size: { fitWidth: number; fitHeight: number; totalWidth: number; totalHeight: number }) => void;
 }
 
-const WordPreview: React.FC<Props> = ({ templateBuffer, resume, options }) => {
+export function WordPreview({ templateBuffer, resume, options, onSizeChange }: WordPreviewProps) {
     const containerRef = useRef<HTMLDivElement>(null);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        // Wordプレビューは現状1ページ想定、または内容に応じた高さになる
+        // 一旦標準的なA4サイズを通知しておく
+        if (onSizeChange) {
+            const a4WidthPx = 210 * 3.78;
+            const a4HeightPx = 297 * 3.78;
+            onSizeChange({
+                fitWidth: a4WidthPx,
+                fitHeight: a4HeightPx,
+                totalWidth: a4WidthPx,
+                totalHeight: a4HeightPx // TODO: 実測が必要
+            });
+        }
+    }, [onSizeChange]);
 
     useEffect(() => {
         const renderDoc = async () => {

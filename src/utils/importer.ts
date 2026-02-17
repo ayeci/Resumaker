@@ -3,7 +3,9 @@
  * (c) 2026 ayeci
  * Released under the MIT License.
  */
+
 import * as pdfjsLib from 'pdfjs-dist';
+
 // ワーカソースの定義 - Viteでは慎重に扱う必要があります。
 // 今のところ標準的なインポートが機能すると仮定するか、CDNやローカルファイルを指す必要があるかもしれません。
 // 通常: pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
