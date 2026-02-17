@@ -1,21 +1,54 @@
+/**
+ * Resumaker
+ * (c) 2026 ayeci
+ * Released under the MIT License.
+ */
+
 @media print {
-  @page {
-    margin: 10mm;
-    size: auto;
-  }
+    @page {
+        margin: 10mm;
+        size: auto;
+    }
 
-  /* Global print resets are handled by Tailwind print:hidden on specific elements */
+    /* グローバルな印刷リセットは、特定の要素に対してTailwindの print:hidden で処理される */
 
-  /* Reset body/html for full page printing */
-  html,
-  body {
-    height: auto !important;
-    overflow: visible !important;
-    background: white !important;
-  }
+    /* ページ全体を印刷するために body/html をリセット */
+    html,
+    body {
+        height: auto !important;
+        overflow: visible !important;
+        background: white !important;
+    }
+}
 
-  /* Style the resume sheets for print */
-  .resume-sheet {
+body {
+    /* ピンチ操作（ズーム）やダブルタップ（ズーム）がブラウザによって無視される。 */
+    touch-action: pan-x pan-y;
+
+    /* iOS Safari対策: バウンススクロールや誤操作を防ぐ（任意だがPWAとしては推奨） */
+    overscroll-behavior: none;
+
+    /* テキスト選択の誤爆を防ぐ */
+    -webkit-user-select: none;
+    user-select: none;
+
+    /* アプリ全体で、ブラウザ標準のタッチ操作（ダブルタップ拡大やピンチ）を抑制する */
+    /* スクロールは許可するが、ピンチ操作はブラウザに渡さない */
+    touch-action: pan-x pan-y;
+    /* iPhoneの「引っ張って更新」のようなバウンスを防ぐ */
+    overscroll-behavior: none;
+}
+
+/* 拡大縮小させたいコンテナだけ、特別な設定をする */
+.zoomable-target {
+    /* ブラウザの操作を完全に無効化し、JSで制御する */
+    touch-action: none;
+    /* 左上を基準に拡大 */
+    transform-origin: 0 0;
+}
+
+/* 印刷用の履歴書シートのスタイル */
+.resume-sheet {
     width: auto;
     min-height: 0;
     padding: 0;
@@ -23,11 +56,10 @@
     box-shadow: none !important;
     border: none !important;
     break-after: page;
-    /* Ensure page break after each sheet */
-  }
+    /* 各シートの後に改ページを確実に挿入 */
+}
 
-  /* Remove break-after from the last sheet to avoid empty page */
-  .resume-sheet:last-child {
+/* 空白ページを避けるため、最後のシートから break-after を削除 */
+.resume-sheet:last-child {
     break-after: auto;
-  }
 }

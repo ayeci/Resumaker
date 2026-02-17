@@ -3,9 +3,12 @@
  * (c) 2026 ayeci
  * Released under the MIT License.
  */
+
 import React from 'react';
+
+import NumberSpinner from './NumberSpinner';
 import { Box, Typography, IconButton, Checkbox, Divider } from '@mui/material';
-import { X, Printer, Download, FileText, LayoutTemplate, Upload, Settings, Github, Shield, AlignLeft, FileSymlink } from 'lucide-react';
+import { X, Printer, Download, FileText, LayoutTemplate, Upload, Settings, Github, Shield, AlignLeft, FileSymlink, Type } from 'lucide-react';
 import { useResume } from '../context/ResumeHooks';
 import { ToggleButton, ToggleButtonGroup } from '@mui/material';
 import styles from './MobileMenu.module.scss';
@@ -18,6 +21,8 @@ interface MobileMenuProps {
     onImport: () => void;
     onLoadTemplate: () => void;
     onOpenSettings: () => void;
+    editorFontSize: number;
+    setEditorFontSize: (size: number) => void;
 }
 
 export const MobileMenu: React.FC<MobileMenuProps> = ({
@@ -26,7 +31,9 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
     onExport,
     onImport,
     onLoadTemplate,
-    onOpenSettings
+    onOpenSettings,
+    editorFontSize,
+    setEditorFontSize
 }) => {
     const {
         templates,
@@ -53,8 +60,8 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
         <Box className={styles.menuOverlay} onClick={onClose}>
             <Box className={styles.menuContent} onClick={(e) => e.stopPropagation()}>
                 <Box className={styles.menuHeader}>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>メニュー</Typography>
-                    <IconButton onClick={onClose} size="small">
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#111827' }}>メニュー</Typography>
+                    <IconButton onClick={onClose} size="small" sx={{ color: '#374151' }}>
                         <X size={24} />
                     </IconButton>
                 </Box>
@@ -74,20 +81,52 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                         </ToggleButtonGroup>
                     </Box>
 
+                    {/* 2. 文字サイズ変更 */}
+                    <Box className={styles.menuItem} sx={{ cursor: 'default' }}>
+                        <Type size={20} />
+                        <Typography className={styles.menuLabel}>文字サイズ</Typography>
+                        <NumberSpinner
+                            value={editorFontSize}
+                            onValueChange={(val) => {
+                                if (val !== null) setEditorFontSize(val);
+                            }}
+                            min={10}
+                            max={30}
+                            step={1}
+                            size="small"
+                            aria-label="文字サイズ"
+                        />
+                    </Box>
+
+                    {/* 3. データ整形 */}
                     <Box className={styles.menuItem} onClick={() => { handleFormat(); onClose(); }}>
                         <AlignLeft size={20} />
                         <Typography className={styles.menuLabel}>データ整形</Typography>
                     </Box>
 
+                    {/* 4. サンプルデータ再読込 */}
                     <Box className={styles.menuItem} onClick={() => { handleReload(); onClose(); }}>
                         <FileSymlink size={20} />
                         <Typography className={styles.menuLabel}>サンプルデータ再読込</Typography>
+                    </Box>
+
+                    {/* 5. データ読込 */}
+                    <Box className={styles.menuItem} onClick={() => { onImport(); onClose(); }}>
+                        <Upload size={20} />
+                        <Typography className={styles.menuLabel}>データ読込</Typography>
+                    </Box>
+
+                    {/* 6. テンプレート読込 */}
+                    <Divider className={styles.divider} />
+                    <Box className={styles.menuItem} onClick={() => { onLoadTemplate(); onClose(); }}>
+                        <LayoutTemplate size={20} />
+                        <Typography className={styles.menuLabel}>テンプレート読込</Typography>
                     </Box>
                 </Box>
 
                 <Divider className={styles.divider} />
 
-                {/* 2. 出力・インポート */}
+                {/* 7. 出力 */}
                 <Box className={clsx(styles.menuGroup, styles.actionGroup)}>
                     <Box className={styles.menuItem} onClick={() => { onPrint(); onClose(); }}>
                         <Printer size={20} />
@@ -106,21 +145,11 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                         <Download size={20} />
                         <Typography className={styles.menuLabel}>JSONで保存</Typography>
                     </Box>
-
-                    <Box className={styles.menuItem} onClick={() => { onImport(); onClose(); }}>
-                        <Upload size={20} />
-                        <Typography className={styles.menuLabel}>データ読み込み</Typography>
-                    </Box>
-
-                    <Box className={styles.menuItem} onClick={() => { onLoadTemplate(); onClose(); }}>
-                        <LayoutTemplate size={20} />
-                        <Typography className={styles.menuLabel}>テンプレート読込</Typography>
-                    </Box>
                 </Box>
 
                 <Divider className={styles.divider} />
 
-                {/* 2. 設定・表示切り替え（オプション系） */}
+                {/* 8. 設定・表示切り替え（オプション系） */}
                 <Box className={clsx(styles.menuGroup, styles.settingsGroup)}>
                     <Box className={styles.menuItem} onClick={() => { onOpenSettings(); onClose(); }}>
                         <Settings size={20} />
@@ -137,20 +166,24 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
 
                 <Divider className={styles.divider} />
 
-                {/* 3. 各テンプレートの表示・出力切り替え */}
+                {/* 9. 各テンプレートの表示・出力切り替え */}
                 <Box className={styles.menuGroup}>
-                    <Typography variant="caption" sx={{ px: 2, py: 1, display: 'block', color: '#6b7280' }}>
+                    <Typography variant="caption" sx={{ px: 2, py: 1, display: 'block', color: '#6b7280', fontWeight: 600 }}>
                         テンプレート選択
                     </Typography>
-                    {templates.map((t) => (
+                    {templates && templates.length > 0 ? templates.map((t) => (
                         <Box key={t.id} className={styles.menuItem} onClick={() => toggleTemplateCheck(t.id)}>
                             <Checkbox checked={t.checked} size="small" className={styles.checkbox} />
-                            <Typography className={styles.menuLabel}>{t.name}</Typography>
+                            <Typography className={styles.menuLabel} sx={{ color: '#374151' }}>{t.name}</Typography>
                         </Box>
-                    ))}
+                    )) : (
+                        <Typography variant="body2" sx={{ px: 2, py: 1, color: '#9ca3af', fontStyle: 'italic' }}>
+                            テンプレートが読み込まれていません
+                        </Typography>
+                    )}
                 </Box>
 
-                {/* 4. アプリ情報 */}
+                {/* 10. アプリ情報 */}
                 <Box className={styles.footerInfo}>
                     <Box className={styles.appName}>
                         <LayoutTemplate size={24} className={styles.logoPrimary} />

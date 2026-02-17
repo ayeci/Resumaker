@@ -3,6 +3,7 @@
  * (c) 2026 ayeci
  * Released under the MIT License.
  */
+
 .editorRoot {
     display: flex;
     flex-direction: column;
@@ -29,6 +30,41 @@
     font-weight: 600;
     color: #64748b;
     text-transform: uppercase;
+}
+
+.editorFontSize {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: default;
+    transition: background-color 0.2s;
+
+    .editorFontSizeSpinner {
+        // 全体の高さをツールバーに合わせる
+        height: 24px;
+
+        :global {
+
+            // 入力欄の微調整
+            .MuiOutlinedInput-input {
+                padding: 0 auto; // 上下のパディングを消して数字を中央に
+                font-size: .75rem; // フォントサイズを少し小さく
+                width: 24px; // 幅を少し狭く
+            }
+
+            // ボタンの微調整
+            .MuiButton-root {
+
+                min-width: 24px;
+                width: 24px;
+                height: 24px;
+
+                & svg {
+                    font-size: 0.9rem; // アイコンサイズ調整
+                }
+            }
+        }
+    }
 }
 
 .editorStatusText {
@@ -72,4 +108,13 @@
     padding: 2px 8px;
     border-radius: 4px;
     border: 1px solid #fee2e2;
+}
+
+:global {
+    .editorTextarea {
+        /* テキスト入力欄の選択を許可 */
+        -webkit-user-select: text;
+        user-select: text;
+        touch-action: auto;
+    }
 }

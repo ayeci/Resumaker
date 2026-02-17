@@ -3,6 +3,7 @@
  * (c) 2026 ayeci
  * Released under the MIT License.
  */
+
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
@@ -22,3 +23,8 @@ createRoot(document.getElementById('root')!).render(
     </ResumeProvider>
   </StrictMode>,
 )
+
+// ネイティブのピンチズームを無効化（Preview.tsxのカスタムズームは動く）
+document.addEventListener('gesturestart', (e) => {
+  e.preventDefault();
+});

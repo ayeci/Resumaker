@@ -3,8 +3,9 @@
  * (c) 2026 ayeci
  * Released under the MIT License.
  */
-import { useState, useRef, useEffect } from 'react';
-import { Box, AppBar, Toolbar, Typography, Button, IconButton, ToggleButton, ToggleButtonGroup, CircularProgress, Menu, MenuItem, ButtonGroup, Checkbox, ListItemText, ListItemIcon, Divider } from '@mui/material';
+
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Box, AppBar, Toolbar, Typography, Button, IconButton, ToggleButton, ToggleButtonGroup, CircularProgress, Menu, MenuItem, ButtonGroup, Checkbox, ListItemText, ListItemIcon, Divider, Alert } from '@mui/material';
 import { Settings, Printer, ChevronLeft, ChevronRight, FileText, LayoutTemplate, FileUp, Upload, ChevronDown, Eye, EyeOff, Github, Shield, Menu as MenuIcon, Edit3 } from 'lucide-react';
 import { ResumeEditor } from './components/Editor';
 import { Preview } from './components/Preview';
@@ -18,12 +19,14 @@ import clsx from 'clsx';
 import { dump } from 'js-yaml';
 import PizZip from 'pizzip';
 import { saveAs } from 'file-saver';
+import type { Message } from './types/message';
 
 /**
  * アプリケーションのルートコンポーネント
  * レイアウトの構築、モード切り替え、エクスポート機能の呼び出しを行う
  */
 function App() {
+
   const { resume, templates, addTemplates, selectedTemplateId, setSelectedTemplateId, previewMode, setPreviewMode, exportOptions, importData, toggleTemplateCheck } = useResume();
   const [isExporting, setIsExporting] = useState(false);
   const [optionDialogOpen, setOptionDialogOpen] = useState(false);
@@ -33,11 +36,65 @@ function App() {
   const [templateMenuAnchorEl, setTemplateMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileView, setMobileView] = useState<'editor' | 'preview'>('editor');
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);// ★ 1. 文字サイズの状態をここで管理（初期値14px）
+  const [editorFontSize, setEditorFontSize] = useState(14);
 
   const isResizing = useRef(false);
   const templateInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+
+  // 画面上に表示する通知
+  const [notifications, setNotifications] = useState<Message[]>([]);
+
+  // ズーム防止
+  useEffect(() => {
+    // --- ガード1: iOS Safariのピンチズーム防止 ---
+    // SafariはCSSのtouch-actionを無視する場合があるため、JSで止める
+    const handleGestureStart = (e: Event) => {
+      e.preventDefault();
+    };
+
+    // --- ガード2: PCの「Ctrl + ホイール」ズーム防止 ---
+    // トラックパッドのピンチ操作も「Ctrl + ホイール」として判定されることが多い
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey) {
+        e.preventDefault();
+      }
+    };
+
+    // --- ガード3: ダブルタップズーム防止（念のため） ---
+    let lastTouchEnd = 0;
+    const handleTouchEnd = (e: TouchEvent) => {
+      const now = new Date().getTime();
+      if (now - lastTouchEnd <= 300) {
+        e.preventDefault();
+      }
+      lastTouchEnd = now;
+    };
+
+    // イベント登録（passive: false が重要）
+    // document全体に対して設定
+    document.addEventListener('gesturestart', handleGestureStart);
+    document.addEventListener('wheel', handleWheel, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: false });
+
+    return () => {
+      // クリーンアップ
+      document.removeEventListener('gesturestart', handleGestureStart);
+      document.removeEventListener('wheel', handleWheel);
+      document.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, []);
+
+  /** 通知を表示するためのコールバック */
+  const handleNotify = useCallback((severity: Message["severity"], content: string) => {
+    setNotifications(prev => [...prev, { open: true, severity, message: content }]);
+  }, []);
+
+  /** 閉じる処理 */
+  const handleClose = (index: number) => {
+    setNotifications(prev => prev.filter((_, i) => i !== index));
+  };
 
   // ウィンドウサイズ監視
   useEffect(() => {
@@ -145,6 +202,21 @@ function App() {
 
   return (
     <Box className={styles.appContainer}>
+      {/* 通知が1つ以上ある時に表示されるコンテナ */}
+      <aside className={styles.notification}>
+        {notifications.map((notif, index) => (
+          <Alert
+            key={index}
+            severity={notif.severity}
+            onClose={() => handleClose(index)} // 個別に閉じられるようにする
+            sx={{ mb: 1, boxShadow: 3 }} // 下に余白を作り、影をつけて浮かせる
+            variant="filled"
+          >
+            {notif.message}
+          </Alert>
+        ))}
+      </aside>
+
       <AppBar position="static" color="default" elevation={1} className={clsx(styles.appHeader, "print-hidden")}>
         <Toolbar className={styles.headerToolbar}>
           <Box className={styles.headerLogoSection}>
@@ -234,46 +306,54 @@ function App() {
       </AppBar>
 
       <Box className={styles.mainContent}>
-        {(!isMobile || mobileView === 'editor') && showSource && (
-          <>
-            <Box className={clsx(styles.editorPane, "print-hidden")} style={{ width: isMobile ? '100%' : editorWidth }}>
-              <ResumeEditor />
-            </Box>
-            {!isMobile && (
-              <Box className={clsx(styles.resizeHandle, "print-hidden", isResizing.current ? styles.dragging : styles.default)} onMouseDown={startResizing} />
-            )}
-          </>
+        <Box
+          className={clsx(styles.editorPane, "print-hidden")}
+          style={{
+            display: (isMobile && mobileView !== 'editor') || !showSource ? 'none' : 'block',
+            width: isMobile ? '100%' : editorWidth
+          }}
+        >
+          <ResumeEditor fontSize={editorFontSize} setFontSize={setEditorFontSize} />
+        </Box>
+
+        {!isMobile && (
+          <Box className={clsx(styles.resizeHandle, "print-hidden", isResizing.current ? styles.dragging : styles.default)} onMouseDown={startResizing} />
         )}
-        {(!isMobile || mobileView === 'preview') && (
-          <Box className={styles.previewPane}>
-            {previewMode === 'template' && visibleTemplates.length > 1 && (
-              <>
-                <div className={styles.templateNavPrevContainer}>
-                  <IconButton className={clsx(styles.templateNavBtn, styles.templateNavPrev, "print-hidden")} onClick={() => {
-                    const i = visibleTemplates.findIndex(t => t.id === selectedTemplateId);
-                    const prevIndex = i === -1 ? 0 : (i - 1 + visibleTemplates.length) % visibleTemplates.length;
-                    setSelectedTemplateId(visibleTemplates[prevIndex].id);
-                  }}><ChevronLeft /></IconButton>
-                </div>
-                <div className={styles.templateNavNextContainer}>
-                  <IconButton className={clsx(styles.templateNavBtn, styles.templateNavNext, "print-hidden")} onClick={() => {
-                    const i = visibleTemplates.findIndex(t => t.id === selectedTemplateId);
-                    const nextIndex = i === -1 ? 0 : (i + 1) % visibleTemplates.length;
-                    setSelectedTemplateId(visibleTemplates[nextIndex].id);
-                  }}><ChevronRight /></IconButton>
-                </div>
-              </>
-            )}
-            <Box className={clsx(styles.previewScrollArea, previewMode === 'template' && styles.templateScroll)}>
-              <Preview />
-            </Box>
+
+        <Box
+          className={styles.previewPane}
+          style={{
+            display: (isMobile && mobileView !== 'preview') ? 'none' : 'flex'
+          }}
+        >
+          {previewMode === 'template' && visibleTemplates.length > 1 && (
+            <>
+              <div className={styles.templateNavPrevContainer}>
+                <IconButton className={clsx(styles.templateNavBtn, styles.templateNavPrev, "print-hidden")} onClick={() => {
+                  const i = visibleTemplates.findIndex(t => t.id === selectedTemplateId);
+                  const prevIndex = i === -1 ? 0 : (i - 1 + visibleTemplates.length) % visibleTemplates.length;
+                  setSelectedTemplateId(visibleTemplates[prevIndex].id);
+                }}><ChevronLeft /></IconButton>
+              </div>
+              <div className={styles.templateNavNextContainer}>
+                <IconButton className={clsx(styles.templateNavBtn, styles.templateNavNext, "print-hidden")} onClick={() => {
+                  const i = visibleTemplates.findIndex(t => t.id === selectedTemplateId);
+                  const nextIndex = i === -1 ? 0 : (i + 1) % visibleTemplates.length;
+                  setSelectedTemplateId(visibleTemplates[nextIndex].id);
+                }}><ChevronRight /></IconButton>
+              </div>
+            </>
+          )}
+          <Box className={clsx(styles.previewScrollArea, previewMode === 'template' && styles.templateScroll)}>
+            <Preview onNotify={handleNotify} />
           </Box>
-        )}
+        </Box>
       </Box>
 
       {/* PC版フッター */}
       <Box component="footer" className={clsx(styles.appFooter, "print-hidden")}>
-        <a href="https://github.com/AyeBee/Resumaker" target="_blank" rel="noopener noreferrer">
+        <Typography variant="caption" sx={{ color: 'inherit', marginBottom: '-0.2rem' }}>Copyright © 2026 ayeci</Typography>
+        <a href="https://github.com/AyeCi/Resumaker" target="_blank" rel="noopener noreferrer">
           <Github size={16} />
           <span>GitHub</span>
         </a>
@@ -281,7 +361,6 @@ function App() {
           <Shield size={16} />
           <span>Privacy Policy</span>
         </a>
-        <Typography variant="caption" sx={{ color: 'inherit' }}>© ayeci</Typography>
       </Box>
 
       {/* モバイル版フッター（タブバー） */}
@@ -316,6 +395,8 @@ function App() {
           onImport={() => importInputRef.current?.click()}
           onLoadTemplate={() => templateInputRef.current?.click()}
           onOpenSettings={() => setOptionDialogOpen(true)}
+          editorFontSize={editorFontSize}
+          setEditorFontSize={setEditorFontSize}
         />
       )}
 

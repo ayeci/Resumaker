@@ -3,86 +3,154 @@
  * (c) 2026 ayeci
  * Released under the MIT License.
  */
+
 .excelPreviewContainer {
-  width: 100%;
-  height: 100%;
-  border: 1px solid #ccc;
-  overflow: hidden;
-  box-sizing: border-box;
-
-  /* FortuneSheetのルートコンテナを強制的に広げる */
-  &>div {
-    width: 100% !important;
-    height: 100% !important;
-  }
-
-  /* セル選択の視覚効果を完全に消す (スクロールは維持) */
-  :global {
-
-    .luckysheet-cell-selected-focus,
-    .luckysheet-selection-copy,
-    .fortune-selection-copy,
-    .fortune-selection-highlight,
-    .fortune-cell-selected-extend,
-    .fortune-cell-selected-move,
-    .luckysheet-cell-selected,
-    .luckysheet-cs-inner-border,
-    .luckysheet-cs-fillhandle,
-    .luckysheet-cs-draghandle,
-    .luckysheet-cs-touchhandle,
-    .luckysheet-cell-input,
-    .fortune-row-header,
-    .fortune-col-header,
-    .fortune-row-header-selected,
-    .fortune-col-header-selected,
-    .fortune-row-header-hover,
-    .fortune-col-header-hover {
-      display: none !important;
-      border: none !important;
-      background: transparent !important;
-    }
-  }
-
-  @media print {
-    height: auto !important;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    margin: 1rem;
+    padding: 1rem;
+    background: #fff;
     overflow: visible !important;
-    position: static !important;
-    border: none !important;
+    box-shadow: 0px 3px 3px -2px rgba(0, 0, 0, 0.2), 0px 3px 4px 0px rgba(0, 0, 0, 0.14), 0px 1px 8px 0px rgba(0, 0, 0, 0.12);
+    box-sizing: border-box;
 
+    /* 親コンテナのスクロールを優先 */
+    overflow: visible !important;
+    flex: 1;
+    min-height: 0;
+
+    /* コンテナごとマウス操作を無視させる */
+    pointer-events: none !important;
+
+    /* FortuneSheet のルートコンテナを強制的に広げる */
     &>div {
-      height: auto !important;
-      overflow: visible !important;
-      position: static !important;
+        width: 100% !important;
+        height: 100% !important;
+        overflow: visible !important;
     }
-  }
+
+    /* 
+   * FortuneSheet の内部スクロールエリアを強制的に visible にする。
+   * これにより、内部スクロールバーが出ず、親の .viewport がスクロールを担当する。
+   */
+    :global {
+
+        .luckysheet-content,
+        .luckysheet-grid-window,
+        .fortune-content,
+        .fortune-grid-window {
+            overflow: visible !important;
+        }
+
+        /* キャンバス自体の左端が切れないよう、念のための設定 */
+        canvas {
+            left: 1px !important;
+        }
+
+        /* 
+     * FortuneSheet の UI 要素を徹底的に封じる。
+     * pointer-events: none によりセル選択や操作を物理的に不可にし、
+     * display/opacity により UI 要素（見出し等）を完全に隠蔽します。
+     */
+        .luckysheet-scrollbar-ltr,
+        .luckysheet-scrollbar-rtl,
+        .luckysheet-scroll-x,
+        .luckysheet-scroll-y,
+        .fortune-scrollbar-ltr,
+        .fortune-scrollbar-rtl,
+        .fortune-scroll-x,
+        .fortune-scroll-y,
+        .luckysheet-rows-h,
+        .luckysheet-cols-h,
+        .luckysheet-rows-h-r,
+        .luckysheet-cols-h-c,
+        .luckysheet-header-container,
+        .luckysheet-sheet-area,
+        .fortune-rows-h,
+        .fortune-cols-h,
+        .fortune-rows-h-r,
+        .fortune-cols-h-c,
+        .fortune-header-container,
+        .fortune-row-header,
+        .fortune-col-header,
+        .fortune-row-header-selected,
+        .fortune-col-header-selected,
+        .fortune-row-header-hover,
+        .fortune-col-header-hover,
+        .fortune-sheet-area,
+        .luckysheet-cell-selected-focus,
+        .luckysheet-selection-copy,
+        .fortune-selection-copy,
+        .fortune-selection-highlight,
+        .fortune-cell-selected-extend,
+        .fortune-cell-selected-move,
+        .luckysheet-cell-selected,
+        .luckysheet-cs-inner-border,
+        .luckysheet-cs-fillhandle,
+        .luckysheet-cs-draghandle,
+        .luckysheet-cs-touchhandle,
+        .luckysheet-cell-input,
+        .luckysheet-stat-area,
+        .luckysheet-sheet-tab-container,
+        .fortune-stat-area,
+        .fortune-sheet-tab-container,
+        .luckysheet-grid-window-native,
+        .fortune-col-header-wrap {
+            display: none !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+
+        /* 文書領域全体に対しても操作を無効化 */
+        .luckysheet-cell-main,
+        .fortune-cell-main {
+            pointer-events: none !important;
+        }
+    }
+
+    @media print {
+        border: none !important;
+        height: auto !important;
+        overflow: visible !important;
+
+        :global {
+
+            .luckysheet-header-container,
+            .luckysheet-stat-area,
+            .luckysheet-cell-selection,
+            .fortune-header-container,
+            .fortune-stat-area,
+            .fortune-cell-selection {
+                display: none !important;
+            }
+        }
+    }
 }
 
-/* HTML: <div class="loader"></div> */
 .renderingContainer {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100%;
+    width: 100%;
+    height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
 
-  .rendering {
-    width: 50px;
-    aspect-ratio: 1;
+.rendering {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #3498db;
     border-radius: 50%;
-    background:
-      radial-gradient(farthest-side, #2563eb 94%, #0000) top/8px 8px no-repeat,
-      conic-gradient(#0000 30%, #e84022 60%, #2563eb);
-    -webkit-mask: radial-gradient(farthest-side, #0000 calc(100% - 8px), #000 0);
-    mask: radial-gradient(farthest-side, #0000 calc(100% - 8px), #000 0);
-    animation: l13 1s infinite linear;
-  }
+    animation: spin 2s linear infinite;
 }
 
-@keyframes l13 {
-  100% {
-    transform: rotate(1turn)
-  }
-}
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
 
-div[class="fortune-col-header-wrap"] {
-  display: none;
+    100% {
+        transform: rotate(360deg);
+    }
 }

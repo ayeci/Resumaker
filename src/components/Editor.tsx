@@ -22,7 +22,8 @@ import {
 import {
     FileCode,
     AlignLeft,
-    FileSymlink
+    FileSymlink,
+    Type
 } from 'lucide-react';
 import { useResume } from '../context/ResumeHooks';
 import { PortraitUpload } from './PortraitUpload';
@@ -30,6 +31,7 @@ import styles from './Editor.module.scss';
 import { resumeSchema } from '../constants/resumeSchema';
 import { loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
+import NumberSpinner from './NumberSpinner';
 
 // monaco-yaml のためにローカルの monaco インスタンスを使用するように設定
 loader.config({ monaco });
@@ -45,10 +47,15 @@ monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
     }]
 });
 
+interface ResumeEditorProps {
+    fontSize: number;
+    setFontSize: (size: number) => void;
+}
+
 /**
  * JSON/YAML形式での直接編集、ファイルインポート、証明写真のアップロード機能を提供する
  */
-export const ResumeEditor = () => {
+export const ResumeEditor: React.FC<ResumeEditorProps> = ({ fontSize, setFontSize }) => {
     const { mode, setMode, rawText, setRawText, parseError, resetToSample, reformat } = useResume();
 
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -78,7 +85,6 @@ export const ResumeEditor = () => {
     };
 
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-
     const handleEditorDidMount = (editor: monaco.editor.IStandaloneCodeEditor) => {
         editorRef.current = editor;
     };
@@ -109,6 +115,21 @@ export const ResumeEditor = () => {
                             <ToggleButton value="yaml" sx={{ fontSize: 10, px: 1 }}>YAML</ToggleButton>
                             <ToggleButton value="json" sx={{ fontSize: 10, px: 1 }}>JSON</ToggleButton>
                         </ToggleButtonGroup>
+                    </Box>
+                    <Box className={styles.editorFontSize}>
+                        <Type size={18} color="#64748b" />
+                        <NumberSpinner
+                            className={styles.editorFontSizeSpinner}
+                            value={fontSize}
+                            onValueChange={(val) => {
+                                if (val !== null) setFontSize(val);
+                            }}
+                            min={10}
+                            max={30}
+                            step={1}
+                            size="small"
+                            aria-label="文字サイズ"
+                        />
                     </Box>
                     <Box className={styles.toolbarActions}>
                         <Tooltip title="データ整形">
@@ -158,7 +179,8 @@ export const ResumeEditor = () => {
                     onMount={handleEditorDidMount}
                     options={{
                         minimap: { enabled: false },
-                        fontSize: 14,
+                        fontSize,
+                        mouseWheelZoom: false,
                         wordWrap: 'on',
                         automaticLayout: true,
                         scrollBeyondLastLine: false,
