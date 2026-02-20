@@ -3,7 +3,7 @@
  * (c) 2026 ayeci
  * Released under the MIT License.
  */
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import Editor from '@monaco-editor/react';
 import {
     Box,
@@ -56,7 +56,7 @@ interface ResumeEditorProps {
  * JSON/YAML形式での直接編集、ファイルインポート、証明写真のアップロード機能を提供する
  */
 export const ResumeEditor: React.FC<ResumeEditorProps> = ({ fontSize, setFontSize }) => {
-    const { mode, setMode, rawText, setRawText, parseError, resetToSample, reformat } = useResume();
+    const { mode, setMode, rawText, setRawText, parseError, resetToSample, reformat, flushPreview } = useResume();
 
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
     const [reloadDialogOpen, setReloadDialogOpen] = useState(false);
@@ -85,9 +85,45 @@ export const ResumeEditor: React.FC<ResumeEditorProps> = ({ fontSize, setFontSiz
     };
 
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+    const editorDomRef = useRef<HTMLElement | null>(null);
     const handleEditorDidMount = (editor: monaco.editor.IStandaloneCodeEditor) => {
         editorRef.current = editor;
+        editorDomRef.current = editor.getDomNode();
     };
+
+    // IME確定・英語Enter・blur時にプレビュー即時更新シグナルを送信
+    const flushRef = useRef(flushPreview);
+    useEffect(() => { flushRef.current = flushPreview; }, [flushPreview]);
+
+    const handleCompositionEnd = useCallback(() => {
+        flushRef.current();
+    }, []);
+
+    const handleKeyDown = useCallback((e: KeyboardEvent) => {
+        // IME入力中のEnterは除外し、英語入力の改行Enterのみ即時更新
+        if (e.key === 'Enter' && !e.isComposing) {
+            flushRef.current();
+        }
+    }, []);
+
+    const handleBlur = useCallback(() => {
+        flushRef.current();
+    }, []);
+
+    useEffect(() => {
+        const dom = editorDomRef.current;
+        if (!dom) return;
+
+        dom.addEventListener('compositionend', handleCompositionEnd);
+        dom.addEventListener('keydown', handleKeyDown);
+        dom.addEventListener('blur', handleBlur, true); // blur は capture で捕捉
+
+        return () => {
+            dom.removeEventListener('compositionend', handleCompositionEnd);
+            dom.removeEventListener('keydown', handleKeyDown);
+            dom.removeEventListener('blur', handleBlur, true);
+        };
+    }, [handleCompositionEnd, handleKeyDown, handleBlur]);
 
     /**
      * エディタの内容を手動でフォーマット（整形）する
