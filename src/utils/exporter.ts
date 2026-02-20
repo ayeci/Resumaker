@@ -13,6 +13,16 @@ import { buildCombinedHistory, processHistory } from './history';
 import { formatCustomDate } from './date_formatter';
 import ImageModule from 'docxtemplater-image-module-free';
 
+/** 読み込む行の上限 */
+const MAX_ADDITIONAL_ROWS = 100;
+/** 読み込む列の上限 */
+const MAX_ADDITIONAL_COLS = 100;
+
+/**
+ * ファイルをArrayBufferに変換する
+ * @param template ファイル
+ * @returns ArrayBuffer
+ */
 const toArrayBuffer = async (template: File | ArrayBuffer): Promise<ArrayBuffer> => {
     if (template instanceof ArrayBuffer) return template;
     return template.arrayBuffer();
@@ -800,6 +810,101 @@ export const generateExcelFromData = async (data: ExportData, templateFile: File
         if (wbXml.includes('<calcPr')) wbXml = wbXml.replace('<calcPr', '<calcPr fullCalcOnLoad="1"');
         else wbXml = wbXml.replace('</workbook>', '<calcPr fullCalcOnLoad="1"/></workbook>');
         zip.file('xl/workbook.xml', wbXml);
+    }
+
+    // UsedRange拡張処理: マージ範囲がデータ範囲を超えている場合にダミーセルを注入する
+    // FortuneSheet等のライブラリで範囲外アクセスによるクラッシュを防止する
+    const colLetterToNum = (col: string): number => {
+        let n = 0;
+        for (let i = 0; i < col.length; i++) {
+            n = n * 26 + (col.charCodeAt(i) - 64);
+        }
+        return n;
+    };
+    const numToColLetter = (n: number): string => {
+        let s = '';
+        while (n > 0) {
+            const r = (n - 1) % 26;
+            s = String.fromCharCode(65 + r) + s;
+            n = Math.floor((n - 1) / 26);
+        }
+        return s;
+    };
+
+    for (const sheetPath of worksheetFiles) {
+        const sf = zip.file(sheetPath);
+        if (!sf) continue;
+        let xml = sf.asText();
+
+        // マージ範囲から最大行・最大列を特定する
+        let mergeMaxRow = 0;
+        let mergeMaxCol = 0;
+        const mergeRegex = /<mergeCell\s+ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"/g;
+        let mm;
+        while ((mm = mergeRegex.exec(xml)) !== null) {
+            const endRow = parseInt(mm[4], 10);
+            const endCol = colLetterToNum(mm[3]);
+            if (endRow > mergeMaxRow) mergeMaxRow = endRow;
+            if (endCol > mergeMaxCol) mergeMaxCol = endCol;
+        }
+
+        if (mergeMaxRow === 0) continue; // マージがないシートはスキップ
+
+        // 現在のデータ範囲の最大行・最大列を取得する（dimension要素またはrow要素から）
+        let dataMaxRow = 0;
+        let dataMaxCol = 0;
+        const dimMatch = xml.match(/<dimension\s+ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"/);
+        if (dimMatch) {
+            dataMaxRow = parseInt(dimMatch[4], 10);
+            dataMaxCol = colLetterToNum(dimMatch[3]);
+        } else {
+            // dimensionがない場合、row要素から最大行を推定
+            const rowRegex = /<row\s+r="(\d+)"/g;
+            let rm;
+            while ((rm = rowRegex.exec(xml)) !== null) {
+                const r = parseInt(rm[1], 10);
+                if (r > dataMaxRow) dataMaxRow = r;
+            }
+        }
+
+        const targetRow = Math.min(
+            Math.max(mergeMaxRow, dataMaxRow),
+            dataMaxRow + MAX_ADDITIONAL_ROWS
+        );
+        const targetCol = Math.min(
+            Math.max(mergeMaxCol, dataMaxCol),
+            dataMaxCol + MAX_ADDITIONAL_COLS // 異常な列（XFDなど）をカット
+        );
+        const colLetter = numToColLetter(targetCol);
+
+        const needRow = targetRow > dataMaxRow;
+        const needCol = targetCol > dataMaxCol; // targetColで判定するように修正
+        if (!needRow && !needCol) continue;
+
+        let dummyRows = '';
+        if (needRow) {
+            // データ終端から結合終端までの全ての空行にダミーセルを注入する
+            for (let r = dataMaxRow + 1; r <= targetRow; r++) {
+                let cells = `<c r="A${r}"/>`;
+                if (colLetter !== 'A') {
+                    cells += `<c r="${colLetter}${r}"/>`;
+                }
+                dummyRows += `<row r="${r}">${cells}</row>`;
+            }
+        }
+
+        const sheetDataEnd = xml.indexOf('</sheetData>');
+        if (sheetDataEnd !== -1 && dummyRows !== '') {
+            xml = xml.substring(0, sheetDataEnd) + dummyRows + xml.substring(sheetDataEnd);
+        }
+
+        // dimension要素を更新してUsedRangeを拡張する
+        if (dimMatch) {
+            const newRef = `${dimMatch[1]}${dimMatch[2]}:${colLetter}${targetRow}`;
+            xml = xml.replace(dimMatch[0], `<dimension ref="${newRef}"`);
+        }
+
+        zip.file(sheetPath, xml);
     }
 
     return zip.generate({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
