@@ -4,7 +4,7 @@
  * Released under the MIT License.
  */
 
-import { useState, type ReactNode, useRef } from 'react';
+import { useState, useCallback, type ReactNode, useRef } from 'react';
 import yaml from 'js-yaml';
 import { DEFAULT_RESUME, type ResumeConfig, DEFAULT_EXPORT_OPTIONS, type ExportOptions, type TemplateEntry } from '../types/resume';
 import { ResumeContext, type EditorMode } from './ResumeHooks';
@@ -113,6 +113,12 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
     const [exportOptions, setExportOptions] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
     const [previewMode, setPreviewMode] = useState<'standard' | 'template'>('standard');
     const [portraitFile, setPortraitFileState] = useState<File | null>(null);
+
+    // プレビュー即時更新シグナル
+    const [flushCount, setFlushCount] = useState(0);
+    const flushPreview = useCallback(() => {
+        setFlushCount(c => c + 1);
+    }, []);
 
     const isImporting = useRef(false);
 
@@ -339,7 +345,8 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
             resume, setResume: handleSetResume, rawText, setRawText: handleSetRawText, mode, setMode: handleSetMode, parseError, importData, reformat,
             sourceFormat, templates: templateFiles, addTemplate: async (f, _fm) => addTemplates([f]), addTemplates, removeTemplate,
             toggleTemplateCheck, selectedTemplateId, setSelectedTemplateId, exportOptions, setExportOptions, previewMode, setPreviewMode,
-            portraitFile, setPortraitFile: handleSetPortraitFile, resetToSample
+            portraitFile, setPortraitFile: handleSetPortraitFile, resetToSample,
+            flushPreview, flushCount
         }}>
             {children}
         </ResumeContext.Provider>

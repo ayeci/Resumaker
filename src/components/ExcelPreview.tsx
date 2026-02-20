@@ -6,17 +6,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { Workbook } from '@fortune-sheet/react';
-import { transformExcelToFortune } from '@zenmrp/fortune-sheet-excel';
 import type { Sheet, Image } from '@fortune-sheet/core';
 import type { IfortuneSheet, IfortuneImageDefault, IfortuneSheetConfig } from '@zenmrp/fortune-sheet-excel/dist/ToFortuneSheet/IFortune';
 import '@fortune-sheet/react/dist/index.css';
 import styles from './ExcelPreview.module.scss';
 import type { ResumeConfig } from '../types/resume';
-import { generateExcelBlob } from '../utils/exporter';
 import PizZip from 'pizzip';
-import { Alert } from '@mui/material';
-import type { Message } from '../types/message';
 import { getMaximumPrintAreaFromList } from '../utils/excel';
+import { useExcelWorker } from '../hooks/useExcelWorker';
+import { useNotification } from './NotificationContext';
 
 interface ExcelPreviewProps {
     templateBuffer: ArrayBuffer;
@@ -24,7 +22,6 @@ interface ExcelPreviewProps {
     width?: number;
     height?: number;
     onSizeChange?: (size: { fitWidth: number; fitHeight: number; totalWidth: number; totalHeight: number }) => void;
-    onNotify?: (severity: Message["severity"], content: string) => void;
 }
 
 /** FortuneSheetのソース画像データ定義（入力時） */
@@ -43,16 +40,19 @@ interface SourceImage extends Partial<Image> {
     };
 }
 
-const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, width, height, onSizeChange, onNotify }) => {
+const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, width, height, onSizeChange }) => {
 
-    // ポップアップメッセージ
-    const [message, setMessage] = useState<Message[]>([]);
+    // 通知フック
+    const { notify } = useNotification();
 
     // Workbookのdataプロパティに渡すため、Sheet[]型を使用
     const [sheetData, setSheetData] = useState<Sheet[]>([]);
     const [loading, setLoading] = useState(true);
     // プレビューの強制再描画用キー
     const [previewKey, setPreviewKey] = useState(0);
+
+    // Web Worker カスタムフック
+    const { generatePreview } = useExcelWorker();
 
     // サイズ変更時に Luckysheet にリサイズを促す（再描画）
     useEffect(() => {
@@ -64,16 +64,11 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, wid
     useEffect(() => {
         let isMounted = true;
 
-        const message_: Message[] = [];
-
         const loadAndTransform = async () => {
             setLoading(true);
             try {
-
-                const excelBlob = await generateExcelBlob(resume, templateBuffer);
-                const fileToTransform = new File([excelBlob], "preview.xlsx", { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-
-                const result = await transformExcelToFortune(fileToTransform);
+                // Worker経由でExcel生成 → FortuneSheet変換を実行
+                const result = await generatePreview(resume, templateBuffer);
 
                 if (!result.sheets || result.sheets.length === 0) {
                     if (isMounted) setSheetData([]);
@@ -92,7 +87,7 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, wid
                     // 印刷範囲を取得する処理の前処理 ここまで
 
 
-                    const finalSheets: Sheet[] = (result.sheets as IfortuneSheet[]).map((sheet, index) => {
+                    const finalSheets: Sheet[] = (result.sheets as unknown as IfortuneSheet[]).map((sheet, index) => {
 
                         // 画像の再配置処理（Excelの読み込み側と表示側でフォーマットが違うので書き換えている）
                         let finalizedImages: Image[] = [];
@@ -319,7 +314,7 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, wid
                                 });
 
                                 if (hasLeftBorderAtStart) {
-                                    onNotify?.("warning", "左端の罫線は表示されていない可能性がありますが、Excel形式で保存した場合は、正常に出力されます。");
+                                    notify("excel-border-warning", "warning", "左端の罫線は表示されていない可能性がありますが、Excel形式で保存した場合は、正常に出力されます。");
                                 }
                                 // 印刷領域の左端に罫線があるかどうかの判別 ここまで
 
@@ -417,7 +412,10 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, wid
                     }
                 }
             } catch (e) {
-                onNotify?.("error", "Excelテンプレートのロードに失敗しました" + e);
+                // キャンセルされた場合はエラーを無視
+                if (isMounted) {
+                    notify("excel-load-error", "error", "Excelテンプレートのロードに失敗しました" + e);
+                }
             } finally {
                 if (isMounted) {
                     setLoading(false);
@@ -430,22 +428,13 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, wid
             loadAndTransform();
         }
 
-        setMessage((prev) => [...prev, ...message_]);
-
         return () => { isMounted = false; };
-    }, [templateBuffer, resume, onSizeChange, onNotify]);
+    }, [templateBuffer, resume, onSizeChange, notify, generatePreview]);
 
     if (loading) return <div className={styles.renderingContainer}><div className={styles.rendering} /></div>;;
 
     return (
         <div className={styles.excelPreviewContainer}>
-            {message.length > 0 && (
-                <article className={styles.popupMessage}>
-                    {message.map((message, index) => (
-                        <Alert severity={message.severity} key={index}>{message.message}</Alert>
-                    ))}
-                </article>
-            )}
             <Workbook
                 key={previewKey}
                 data={sheetData}

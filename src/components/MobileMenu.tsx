@@ -8,7 +8,8 @@ import React from 'react';
 
 import NumberSpinner from './NumberSpinner';
 import { Box, Typography, IconButton, Checkbox, Divider } from '@mui/material';
-import { X, Printer, Download, FileText, LayoutTemplate, Upload, Settings, Github, Shield, AlignLeft, FileSymlink, Type } from 'lucide-react';
+import { X, Printer, Download, FileText, LayoutTemplate, Upload, Settings, Shield, AlignLeft, FileSymlink, Type } from 'lucide-react';
+import { FaGithub } from "react-icons/fa";
 import { useResume } from '../context/ResumeHooks';
 import { ToggleButton, ToggleButtonGroup } from '@mui/material';
 import styles from './MobileMenu.module.scss';
@@ -194,7 +195,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                     </Box>
                     <Box className={styles.footerLinks}>
                         <a href="https://github.com/AyeBee/Resumaker" target="_blank" rel="noopener noreferrer">
-                            <Github size={16} />
+                            <FaGithub size={16} />
                             <span>GitHub</span>
                         </a>
                         <a href="/PRIVACY.md" target="_blank" rel="noopener noreferrer">

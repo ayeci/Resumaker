@@ -63,6 +63,10 @@ export interface ResumeContextType {
     /** 現在の内容に基づいてドキュメントを再フォーマットする */
     reformat: () => Promise<void>;
     resetToSample: () => void;
+    /** プレビューの即時更新を要求する（IME確定、Enter、blur時に呼び出す） */
+    flushPreview: () => void;
+    /** プレビュー即時更新シグナルのカウンター */
+    flushCount: number;
 }
 
 /**

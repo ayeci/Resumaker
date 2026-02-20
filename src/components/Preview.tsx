@@ -11,17 +11,16 @@ import clsx from 'clsx';
 import WordPreview from './WordPreview';
 import StandardPreview, { A4_WIDTH_MM, A4_HEIGHT_MM } from './StandardPreview';
 import { Box } from '@mui/material';
-import type { Message } from '../types/message';
+import { usePreviewTrigger } from '../hooks/usePreviewTrigger';
 
 const ExcelPreview = React.lazy(() => import('./ExcelPreview'));
 const MM_TO_PX = 3.78;
 
-interface PreviewProps {
-    onNotify?: (severity: Message["severity"], content: string) => void;
-}
+export const Preview: React.FC = () => {
+    const { resume, templates, selectedTemplateId, previewMode, exportOptions, flushCount } = useResume();
 
-export const Preview: React.FC<PreviewProps> = ({ onNotify }) => {
-    const { resume, templates, selectedTemplateId, previewMode, exportOptions } = useResume();
+    // デバウンス済みのプレビュー用履歴書データ
+    const { previewResume } = usePreviewTrigger(resume, flushCount);
     const viewportRef = useRef<HTMLDivElement>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
     const [scale, setScale] = useState(1);
@@ -144,15 +143,14 @@ export const Preview: React.FC<PreviewProps> = ({ onNotify }) => {
                         <Suspense fallback={<div>Loading Excel Preview...</div>}>
                             <ExcelPreview
                                 templateBuffer={selectedTemplate.arrayBuffer}
-                                resume={resume}
+                                resume={previewResume}
                                 onSizeChange={handleSizeChange}
-                                onNotify={onNotify}
                             />
                         </Suspense>
                     ) : selectedTemplate.format === 'word' ? (
                         <WordPreview
                             templateBuffer={selectedTemplate.arrayBuffer}
-                            resume={resume}
+                            resume={previewResume}
                             options={exportOptions}
                             onSizeChange={handleSizeChange}
                         />
@@ -162,7 +160,7 @@ export const Preview: React.FC<PreviewProps> = ({ onNotify }) => {
                 </Box>
             );
         }
-        return <StandardPreview resume={resume} exportOptions={exportOptions} onSizeChange={handleSizeChange} />;
+        return <StandardPreview resume={previewResume} exportOptions={exportOptions} onSizeChange={handleSizeChange} />;
     };
 
     // 論理サイズ（ベースとなる大きさ）
