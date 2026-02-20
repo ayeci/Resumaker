@@ -26,6 +26,7 @@ export const Preview: React.FC = () => {
     const [scale, setScale] = useState(1);
     const initialDistance = useRef<number | null>(null);
     const initialScale = useRef<number>(1);
+    const isManualZoomRef = useRef(false);
 
     const scaleRef = useRef(scale);
     useEffect(() => { scaleRef.current = scale; }, [scale]);
@@ -41,13 +42,16 @@ export const Preview: React.FC = () => {
     });
 
     // スケーリングの更新処理
-    const updateScale = React.useCallback((forcedSize?: typeof contentSize) => {
+    const updateScale = React.useCallback((forcedSize?: typeof contentSize, forceReset: boolean = false) => {
         const viewport = viewportRef.current;
         if (!viewport) return;
 
-        const parentWidth = viewport.clientWidth || window.innerWidth;
-        const size = forcedSize || contentSize;
         const isMobile = window.innerWidth <= 768;
+        // モバイルではスクロールバーの出現/消失による ResizeObserver 無限ループ（Reactのクラッシュ、真っ白な画面）を防ぐため、
+        // viewport.clientWidth を避け window.innerWidth で固定します。
+        const parentWidth = isMobile ? window.innerWidth : (viewport.clientWidth > 0 ? viewport.clientWidth : window.innerWidth);
+
+        const size = forcedSize || contentSize;
 
         // テンプレートモードではパディングなし、通常プレビューでは 32px (1rem*2)
         const currentPadding = previewMode === 'template' ? 0 : 32;
@@ -56,15 +60,20 @@ export const Preview: React.FC = () => {
         let newScale = 1;
 
         if (isMobile) {
-            // モバイル: 表示可能領域の横幅いっぱいにフィット (Viewportの端に合わせる)
-            newScale = parentWidth / contentFitWidthWithPadding;
+            // モバイル: 表示可能領域の横幅いっぱいにフィット (ウインドウの端に合わせる)
+            // 少しだけ余白を見込むため 0.96 などをかけるか、単に parentWidth をパディング込みで計算
+            newScale = size.fitWidth > 0 ? (parentWidth) / contentFitWidthWithPadding : 1;
         } else {
             // PC: ユーザー要望により 100% 表示を基本とする (縮小フィットさせない)
             newScale = 1.0;
         }
 
         // 下限設定
-        setScale(Math.max(newScale, 0.1));
+        setScale(prev => {
+            // 手動ズーム中で、強制リセットでない場合は現在の倍率を維持
+            if (!forceReset && isManualZoomRef.current) return prev;
+            return Math.max(newScale, 0.1);
+        });
     }, [contentSize, previewMode]);
 
     // 子コンポーネントからのサイズ変更通知
@@ -72,23 +81,26 @@ export const Preview: React.FC = () => {
         setContentSize(size);
     }, []);
 
-    // ResizeObserverによるコンテナサイズ監視
+    // ウィンドウリサイズによるコンテナサイズ監視 (ResizeObserverの無限ループ回避のため)
     useLayoutEffect(() => {
-        const viewport = viewportRef.current;
-        if (!viewport) return;
+        const handleResize = () => {
+            if (!isManualZoomRef.current) {
+                updateScale();
+            }
+        };
 
-        const observer = new ResizeObserver(() => {
-            updateScale();
-        });
-        observer.observe(viewport);
+        // 初期ロード時にも一回実行
+        handleResize();
 
-        return () => observer.disconnect();
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
     }, [updateScale]);
 
     // モード切替時にスケーリングをリセット
     useEffect(() => {
         const frameId = requestAnimationFrame(() => {
-            updateScale();
+            isManualZoomRef.current = false;
+            updateScale(undefined, true);
         });
         return () => cancelAnimationFrame(frameId);
     }, [previewMode, selectedTemplateId, updateScale]);
@@ -118,6 +130,7 @@ export const Preview: React.FC = () => {
                 );
                 const delta = dist / initialDistance.current;
                 const newScale = Math.min(Math.max(initialScale.current * delta, 0.1), 3);
+                isManualZoomRef.current = true;
                 setScale(newScale);
             }
         };
@@ -134,6 +147,44 @@ export const Preview: React.FC = () => {
             element.removeEventListener('touchend', handleTouchEnd);
         };
     }, []);
+
+    // マウスホイールでのズーム操作の登録
+    useEffect(() => {
+        const container = viewportRef.current;
+        if (!container) return;
+
+        const handleWheel = (e: WheelEvent) => {
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault(); // ブラウザ全体のズームを防ぐ
+
+                const zoomSensitivity = 0.001;
+                const delta = -e.deltaY * zoomSensitivity;
+
+                setScale((prev) => {
+                    const newScale = Math.min(Math.max(prev + delta, 0.1), 3.0);
+                    isManualZoomRef.current = true;
+                    return newScale;
+                });
+            }
+        };
+
+        container.addEventListener('wheel', handleWheel, { passive: false });
+        return () => container.removeEventListener('wheel', handleWheel);
+    }, []);
+
+    // Ctrl+0でのズームリセット操作の登録
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === '0') {
+                e.preventDefault(); // ブラウザ標準のズームリセットを防ぐ
+                isManualZoomRef.current = false;
+                updateScale(undefined, true);
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [updateScale]);
 
     const renderContent = () => {
         if (previewMode === 'template' && selectedTemplate) {

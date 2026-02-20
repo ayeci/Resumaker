@@ -352,7 +352,11 @@ function App() {
           </Box>
           <Box
             className={clsx(styles.mobileTabItem, mobileView === 'preview' && styles.active)}
-            onClick={() => setMobileView('preview')}
+            onClick={() => {
+              setMobileView('preview');
+              // FortuneSheetがdisplay:noneから復帰した際に正しく再描画されるようにリサイズイベントを発火
+              setTimeout(() => window.dispatchEvent(new Event('resize')), 10);
+            }}
           >
             <Eye size={24} />
             <Typography variant="caption">プレビュー</Typography>
@@ -382,6 +386,7 @@ function App() {
           if (e.target.files && e.target.files.length > 0) {
             addTemplates(Array.from(e.target.files));
             setPreviewMode('template');
+            setMobileView('preview'); // 読み込み完了時にプレビュータブへ自動遷移
           }
           e.target.value = '';
         }} />
