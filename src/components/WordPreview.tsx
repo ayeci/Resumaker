@@ -4,7 +4,7 @@
  * Released under the MIT License.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { renderAsync } from 'docx-preview';
 import type { ResumeConfig, ExportOptions } from '../types/resume';
 import { generateWordBlob } from '../utils/exporter';

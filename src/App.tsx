@@ -197,7 +197,7 @@ function App() {
         <AppBar position="static" color="default" elevation={1} className={clsx(styles.appHeader, "print-hidden")}>
           <Toolbar className={styles.headerToolbar}>
             <Box className={styles.headerLogoSection}>
-              <LayoutTemplate size={24} className={styles.logoBefore} />
+              <img src="/favicon.svg" title="Resumaker" alt="Resumaker" className={styles.logoBefore} />
               <Typography variant="h6" component="div" sx={{ fontWeight: 700 }}>
                 <span className={styles.logoTextBefore}>Resu</span>
                 <span className={styles.logoTextAfter}>maker</span>

@@ -39,7 +39,6 @@
         body {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
-            background: white !important;
         }
 
         * {
@@ -66,6 +65,11 @@
     padding: 1.5em;
     will-change: filter;
     transition: filter 300ms;
+}
+
+.logoBefore {
+    width: 32px;
+    height: 32px;
 }
 
 .logoBefore,
@@ -123,7 +127,6 @@
 .headerLogoSection {
     display: flex;
     align-items: center;
-    gap: 8px;
 }
 
 /* メインレイアウト */
