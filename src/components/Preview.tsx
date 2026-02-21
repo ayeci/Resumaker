@@ -10,7 +10,8 @@ import styles from './Preview.module.scss';
 import clsx from 'clsx';
 import WordPreview from './WordPreview';
 import StandardPreview, { A4_WIDTH_MM, A4_HEIGHT_MM } from './StandardPreview';
-import { Box } from '@mui/material';
+import { Box, IconButton, Tooltip } from '@mui/material';
+import { RotateCcw } from 'lucide-react';
 import { usePreviewTrigger } from '../hooks/usePreviewTrigger';
 
 const ExcelPreview = React.lazy(() => import('./ExcelPreview'));
@@ -24,12 +25,31 @@ export const Preview: React.FC = () => {
     const viewportRef = useRef<HTMLDivElement>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
     const [scale, setScale] = useState(1);
+    const [baseScale, setBaseScale] = useState(1);
+    const [pan, setPan] = useState({ x: 0, y: 0 });
+    //const [isDragging, setIsDragging] = useState(false);
+    const isDraggingRef = useRef(false);
+    const lastPanPos = useRef({ x: 0, y: 0 });
     const initialDistance = useRef<number | null>(null);
     const initialScale = useRef<number>(1);
     const isManualZoomRef = useRef(false);
 
+
+    // 1. 操作したいDOM要素（インスタンス）を保持する変数
+    const innerRef = useRef<HTMLDivElement>(null);
+
+    // 2. 座標データ（計算用の最新値）を保持する変数
+    // ※ useState ではなく useRef を使うことで、値を書き換えても「再描画」を発生させない
+    const panRef = useRef({ x: 0, y: 0 });
+
+    // 3. ズーム倍率も同様に Ref で持っておくと同期が楽です
     const scaleRef = useRef(scale);
-    useEffect(() => { scaleRef.current = scale; }, [scale]);
+
+    // Stateが更新されたら、こっそり Ref も同期しておく（初期化・ボタンリセット用）
+    useEffect(function syncRefs() {
+        panRef.current = pan;
+        scaleRef.current = scale;
+    }, [pan, scale]);
 
     const selectedTemplate = templates.find(t => t.id === selectedTemplateId) ?? null;
 
@@ -41,6 +61,27 @@ export const Preview: React.FC = () => {
         totalHeight: A4_HEIGHT_MM * MM_TO_PX
     });
 
+    // 論理サイズ（ベースとなる大きさ）
+    const currentPadding = previewMode === 'template' ? 0 : 32;
+    const baseWidthPx = contentSize.totalWidth + currentPadding;
+    const baseHeightPx = contentSize.totalHeight + currentPadding;
+
+
+    /** DOM直接操作用の共通ヘルパー関数 */
+    const applyTransformToDOM = React.useCallback(() => {
+        if (innerRef.current) {
+            innerRef.current.style.transform = `translate3d(${panRef.current.x}px, ${panRef.current.y}px, 0) scale(${scaleRef.current})`;
+        }
+        if (wrapperRef.current) {
+            const scaledWidth = `${baseWidthPx * scaleRef.current}px`;
+            const scaledHeight = `${baseHeightPx * scaleRef.current}px`;
+
+            wrapperRef.current.style.width = scaledWidth;
+            wrapperRef.current.style.height = scaledHeight;
+            wrapperRef.current.style.minWidth = scaledWidth;
+            wrapperRef.current.style.minHeight = scaledHeight;
+        }
+    }, [baseWidthPx, baseHeightPx]);
     // スケーリングの更新処理
     const updateScale = React.useCallback((forcedSize?: typeof contentSize, forceReset: boolean = false) => {
         const viewport = viewportRef.current;
@@ -69,10 +110,13 @@ export const Preview: React.FC = () => {
         }
 
         // 下限設定
+        const finalNewScale = Math.max(newScale, 0.1);
+        setBaseScale(finalNewScale);
+
         setScale(prev => {
             // 手動ズーム中で、強制リセットでない場合は現在の倍率を維持
             if (!forceReset && isManualZoomRef.current) return prev;
-            return Math.max(newScale, 0.1);
+            return finalNewScale;
         });
     }, [contentSize, previewMode]);
 
@@ -101,6 +145,7 @@ export const Preview: React.FC = () => {
         const frameId = requestAnimationFrame(() => {
             isManualZoomRef.current = false;
             updateScale(undefined, true);
+            setPan({ x: 0, y: 0 });
         });
         return () => cancelAnimationFrame(frameId);
     }, [previewMode, selectedTemplateId, updateScale]);
@@ -131,27 +176,39 @@ export const Preview: React.FC = () => {
                 const delta = dist / initialDistance.current;
                 const newScale = Math.min(Math.max(initialScale.current * delta, 0.1), 3);
                 isManualZoomRef.current = true;
-                setScale(newScale);
+                scaleRef.current = newScale; // StateではなくRefを更新
+
+                applyTransformToDOM();
             }
         };
 
-        const handleTouchEnd = () => { initialDistance.current = null; };
+        const handleTouchEnd = () => {
+            if (initialDistance.current !== null) {
+                initialDistance.current = null;
+                // 指を離したタイミングでStateに反映
+                setScale(scaleRef.current);
+            }
+        };
 
         element.addEventListener('touchstart', handleTouchStart, { passive: false });
         element.addEventListener('touchmove', handleTouchMove, { passive: false });
         element.addEventListener('touchend', handleTouchEnd);
+        element.addEventListener('touchcancel', handleTouchEnd); // touchend / touchcancel 両方に設定
 
         return () => {
             element.removeEventListener('touchstart', handleTouchStart);
             element.removeEventListener('touchmove', handleTouchMove);
             element.removeEventListener('touchend', handleTouchEnd);
+            element.removeEventListener('touchcancel', handleTouchEnd);
         };
-    }, []);
+    }, [applyTransformToDOM]);
 
     // マウスホイールでのズーム操作の登録
     useEffect(() => {
         const container = viewportRef.current;
         if (!container) return;
+
+        let wheelTimeout: NodeJS.Timeout | null = null;
 
         const handleWheel = (e: WheelEvent) => {
             if (e.ctrlKey || e.metaKey) {
@@ -160,17 +217,26 @@ export const Preview: React.FC = () => {
                 const zoomSensitivity = 0.001;
                 const delta = -e.deltaY * zoomSensitivity;
 
-                setScale((prev) => {
-                    const newScale = Math.min(Math.max(prev + delta, 0.1), 3.0);
-                    isManualZoomRef.current = true;
-                    return newScale;
-                });
+                const newScale = Math.min(Math.max(scaleRef.current + delta, 0.1), 3.0);
+                isManualZoomRef.current = true;
+                scaleRef.current = newScale; // StateではなくRefを更新
+
+                applyTransformToDOM();
+
+                // ホイールが止まってから150ms後にStateに反映
+                if (wheelTimeout) clearTimeout(wheelTimeout);
+                wheelTimeout = setTimeout(() => {
+                    setScale(scaleRef.current);
+                }, 150);
             }
         };
 
         container.addEventListener('wheel', handleWheel, { passive: false });
-        return () => container.removeEventListener('wheel', handleWheel);
-    }, []);
+        return () => {
+            container.removeEventListener('wheel', handleWheel);
+            if (wheelTimeout) clearTimeout(wheelTimeout);
+        };
+    }, [applyTransformToDOM]);
 
     // Ctrl+0でのズームリセット操作の登録
     useEffect(() => {
@@ -179,6 +245,7 @@ export const Preview: React.FC = () => {
                 e.preventDefault(); // ブラウザ標準のズームリセットを防ぐ
                 isManualZoomRef.current = false;
                 updateScale(undefined, true);
+                setPan({ x: 0, y: 0 });
             }
         };
 
@@ -214,41 +281,116 @@ export const Preview: React.FC = () => {
         return <StandardPreview resume={previewResume} exportOptions={exportOptions} onSizeChange={handleSizeChange} />;
     };
 
-    // 論理サイズ（ベースとなる大きさ）
-    const currentPadding = previewMode === 'template' ? 0 : 32;
-    const baseWidthPx = contentSize.totalWidth + currentPadding;
-    const baseHeightPx = contentSize.totalHeight + currentPadding;
+    // パン（ドラッグ）用のイベントハンドラ
+    const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+        // メインボタン（左クリック）またはタッチの場合のみ処理
+        if (e.button !== 0 && e.pointerType === 'mouse') return;
+
+        isDraggingRef.current = true; // StateではなくRefを更新
+        lastPanPos.current = { x: e.clientX, y: e.clientY };
+        e.currentTarget.setPointerCapture(e.pointerId);
+    };
+
+    // ズーム・パンのカクツキ対策でDOMのstyleを直接操作する
+    const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (!isDraggingRef.current || initialDistance.current !== null) return;
+
+        const dx = e.clientX - lastPanPos.current.x;
+        const dy = e.clientY - lastPanPos.current.y;
+
+        // 座標データ(panRef)を更新（ここでは再描画は起きない）
+        panRef.current = {
+            x: panRef.current.x + dx,
+            y: panRef.current.y + dy
+        };
+
+        applyTransformToDOM();
+
+        lastPanPos.current = { x: e.clientX, y: e.clientY };
+    };
+
+    const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+        if (!isDraggingRef.current) return;
+        isDraggingRef.current = false; // Refを戻す
+        e.currentTarget.releasePointerCapture(e.pointerId);
+
+        // ポインターアップ時に一回だけ State を更新して、DOM直接操作を React の世界に結果を報告する
+        setPan(panRef.current);
+        setScale(scaleRef.current);
+    };
 
     return (
-        <Box className={styles.viewport} ref={viewportRef}>
+        <Box style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}>
             <Box
-                ref={wrapperRef}
-                className={clsx(styles.wrapper, previewMode === 'template' && styles.templateMode)}
-                style={{
-                    /* 物理的な「フットプリント」サイズをJSで確保 */
-                    width: `${baseWidthPx * scale}px`,
-                    height: `${baseHeightPx * scale}px`,
-
-                    /* モバイルなどでギリギリの時に吸着しないよう、
-                       少しだけ余白を持たせると安全です（任意）
-                    */
-                    minWidth: `${baseWidthPx * scale}px`,
-                    minHeight: `${baseHeightPx * scale}px`,
-                } as React.CSSProperties}
+                className={styles.viewport}
+                ref={viewportRef}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerUp}
+                style={{ cursor: 'grab', touchAction: 'none' }}
             >
                 <Box
-                    className={clsx(styles.inner, previewMode === 'template' && styles.templateInner)}
+                    ref={wrapperRef}
+                    className={clsx(styles.wrapper, previewMode === 'template' && styles.templateMode)}
                     style={{
-                        width: `${baseWidthPx}px`,
-                        height: `${baseHeightPx}px`,
+                        /* 物理的な「フットプリント」サイズをJSで確保 */
+                        width: `${baseWidthPx * scale}px`,
+                        height: `${baseHeightPx * scale}px`,
 
-                        /* ここを変えました：左上基準 */
-                        transform: `scale(${scale})`,
-                        transformOrigin: 'top left',
+                        /* モバイルなどでギリギリの時に吸着しないよう、
+                           少しだけ余白を持たせると安全です（任意）
+                        */
+                        minWidth: `${baseWidthPx * scale}px`,
+                        minHeight: `${baseHeightPx * scale}px`,
                     } as React.CSSProperties}
                 >
-                    {renderContent()}
+                    <Box
+                        className={clsx(styles.inner, previewMode === 'template' && styles.templateInner)}
+                        ref={innerRef}
+                        style={{
+                            width: `${baseWidthPx}px`,
+                            height: `${baseHeightPx}px`,
+                            /* GPUアクセラレーションを強制 */
+                            willChange: 'transform',
+                            /* ズームと移動を同時に適用（必ず translate → scale の順序） */
+                            transform: `translate3d(${pan.x}px, ${pan.y}px,0) scale(${scale})`,
+                            transformOrigin: 'top left',
+                        } as React.CSSProperties}
+                    >
+                        {renderContent()}
+                    </Box>
                 </Box>
+            </Box>
+
+            {/* ズーム/パンのリセットボタン */}
+            <Box
+                style={{
+                    position: 'absolute',
+                    bottom: 16,
+                    right: 16,
+                    zIndex: 1000,
+                    opacity: (Math.abs(scale - baseScale) > 0.001 || pan.x !== 0 || pan.y !== 0) ? 1 : 0,
+                    pointerEvents: (Math.abs(scale - baseScale) > 0.001 || pan.x !== 0 || pan.y !== 0) ? 'auto' : 'none',
+                    transition: 'opacity 0.2s ease-in-out',
+                }}
+            >
+                <Tooltip title="表示リセット (Ctrl+0)" placement="left">
+                    <IconButton
+                        onClick={() => {
+                            isManualZoomRef.current = false;
+                            updateScale(undefined, true);
+                            setPan({ x: 0, y: 0 });
+                        }}
+                        style={{
+                            backgroundColor: '#fff',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                        }}
+                        size="medium"
+                    >
+                        <RotateCcw size={20} />
+                    </IconButton>
+                </Tooltip>
             </Box>
         </Box>
     );
