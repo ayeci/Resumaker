@@ -45,7 +45,6 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, wid
     // 通知フック
     const { notify } = useNotification();
 
-    // Workbookのdataプロパティに渡すため、Sheet[]型を使用
     const [sheetData, setSheetData] = useState<Sheet[]>([]);
     const [loading, setLoading] = useState(true);
     // プレビューの強制再描画用キー
@@ -87,7 +86,7 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, wid
                     // 印刷範囲を取得する処理の前処理 ここまで
 
 
-                    const finalSheets: Sheet[] = (result.sheets as unknown as IfortuneSheet[]).map((sheet, index) => {
+                    const processedSheets: Sheet[] = (result.sheets as unknown as IfortuneSheet[]).map((sheet, index) => {
 
                         // 画像の再配置処理（Excelの読み込み側と表示側でフォーマットが違うので書き換えている）
                         let finalizedImages: Image[] = [];
@@ -184,8 +183,8 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, wid
                             const rawImages = sheet.images as unknown as (SourceImage[] | Record<string, SourceImage>);
 
                             if (Array.isArray(rawImages)) {
-                                finalizedImages = rawImages.map((img: SourceImage, index: number) => {
-                                    const id = img.id ?? `img_${index}_${Math.random().toString(36).substring(2, 5)}`;
+                                finalizedImages = rawImages.map((img: SourceImage, idx: number) => {
+                                    const id = img.id ?? `img_${idx}_${Math.random().toString(36).substring(2, 5)}`;
                                     return processImage(id, img);
                                 });
                             } else {
@@ -258,10 +257,30 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, wid
                                 _update: Date.now()
                             }
                         } as unknown as Sheet;
-                    });
+                    }); // mapped loop ends here
+
+                    let finalSheets = processedSheets;
+                    // 空シート対策：FortuneSheet変換後に必要なプロパティが欠落している場合は補完する
+                    if (!finalSheets || finalSheets.length === 0) {
+                        finalSheets = [{
+                            name: "Sheet1",
+                            id: "1",
+                            status: 1,
+                            order: 0,
+                            data: [[null]],
+                            celldata: [],
+                        } as unknown as Sheet];
+                    } else {
+                        finalSheets.forEach((s: any, i: number) => {
+                            if (s.id === undefined) s.id = String(i + 1);
+                            if (s.status === undefined) s.status = i === 0 ? 1 : 0;
+                            if (s.order === undefined) s.order = i;
+                            if (!s.name) s.name = `Sheet${i + 1}`;
+                        });
+                    }
 
                     setSheetData(finalSheets);
-                    setPreviewKey(prev => prev + 1);
+                    setPreviewKey(Date.now()); // キーを更新してWorkbookを強制再マウント
 
                     // 印刷範囲に基づいたサイズを親に通知
                     if (onSizeChange && finalSheets.length > 0) {
@@ -411,17 +430,30 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, wid
                         });
                     }
                 }
-            } catch (e) {
+            } catch (e: any) {
                 // キャンセルされた場合はエラーを無視
                 if (isMounted) {
-                    notify("excel-load-error", "error", "Excelテンプレートのロードに失敗しました" + e);
+                    const errorMessage = e instanceof Error ? e.message : String(e);
+                    // fetchのAbortErrorや意図的なキャンセルの場合は通知しない
+                    if (!errorMessage.includes("キャンセル")) {
+                        notify("excel-load-error", "error", errorMessage);
+                        // マーカーが存在しないなどのエラー時は空のシートを表示する
+                        setSheetData([{
+                            name: "Sheet1",
+                            id: "1",
+                            status: 1,
+                            order: 0,
+                            data: [[null]],
+                            celldata: [],
+                        } as unknown as Sheet]);
+                        setPreviewKey(Date.now());
+                    }
                 }
             } finally {
                 if (isMounted) {
                     setLoading(false);
                 }
             }
-
         };
 
         if (templateBuffer) {
@@ -431,7 +463,7 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, wid
         return () => { isMounted = false; };
     }, [templateBuffer, resume, onSizeChange, notify, generatePreview]);
 
-    if (loading) return <div className={styles.renderingContainer}><div className={styles.rendering} /></div>;;
+    if (loading) return <div className={styles.renderingContainer}><div className={styles.rendering} /></div>;
 
     return (
         <div className={styles.excelPreviewContainer}>
@@ -449,10 +481,9 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, wid
                 columnHeaderHeight={0}
                 hooks={{
                     beforeCellMouseDown: () => false, // セル選択を無効化（クリックイベントをキャンセル）
-                }
-                }
+                }}
             />
-        </div >
+        </div>
     );
 };
 

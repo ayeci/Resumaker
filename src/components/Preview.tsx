@@ -13,6 +13,7 @@ import StandardPreview, { A4_WIDTH_MM, A4_HEIGHT_MM } from './StandardPreview';
 import { Box, IconButton, Tooltip } from '@mui/material';
 import { RotateCcw } from 'lucide-react';
 import { usePreviewTrigger } from '../hooks/usePreviewTrigger';
+import { ErrorBoundary } from './ErrorBoundary';
 
 const ExcelPreview = React.lazy(() => import('./ExcelPreview'));
 const MM_TO_PX = 3.78;
@@ -27,13 +28,11 @@ export const Preview: React.FC = () => {
     const [scale, setScale] = useState(1);
     const [baseScale, setBaseScale] = useState(1);
     const [pan, setPan] = useState({ x: 0, y: 0 });
-    //const [isDragging, setIsDragging] = useState(false);
     const isDraggingRef = useRef(false);
     const lastPanPos = useRef({ x: 0, y: 0 });
     const initialDistance = useRef<number | null>(null);
     const initialScale = useRef<number>(1);
     const isManualZoomRef = useRef(false);
-
 
     // 1. 操作したいDOM要素（インスタンス）を保持する変数
     const innerRef = useRef<HTMLDivElement>(null);
@@ -68,13 +67,59 @@ export const Preview: React.FC = () => {
 
 
     /** DOM直接操作用の共通ヘルパー関数 */
-    const applyTransformToDOM = React.useCallback(() => {
+    const applyTransformToDOM = React.useCallback((pan: { x: number, y: number }, scale: number) => {
+        let finalX = pan.x;
+        let finalY = pan.y;
+        if (viewportRef.current && wrapperRef.current) {
+            // Viewport と Wrapper の「実際の画面上の位置」を取得
+            // （DOMを書き換える前に取得するので、パフォーマンス低下の心配はありません）
+            const viewportRect = viewportRef.current.getBoundingClientRect();
+            const wrapperRect = wrapperRef.current.getBoundingClientRect();
+
+            // CSSのFlexbox等による「中央寄せ」で生じている本来のズレ（余白）を計算
+            const wrapperOffsetX = wrapperRect.left - viewportRect.left;
+            const wrapperOffsetY = wrapperRect.top - viewportRect.top;
+
+            // 子コンポーネントからの自己申告サイズだけでなく、
+            // 実際のDOM（Wordの複数ページ等であふれた分）の scrollWidth / scrollHeight も見て、大きい方を採用する
+            const actualWidth = innerRef.current ? Math.max(baseWidthPx, innerRef.current.scrollWidth) : baseWidthPx;
+            const actualHeight = innerRef.current ? Math.max(baseHeightPx, innerRef.current.scrollHeight) : baseHeightPx;
+
+            const scaledWidth = baseWidthPx * scale;
+            const scaledHeight = baseHeightPx * scale;
+
+            const MARGIN_X = Math.min(100, viewportRect.width * 0.2);
+            const MARGIN_Y = Math.min(100, viewportRect.height * 0.2);
+
+            // X軸の制限
+            const minX = MARGIN_X - scaledWidth - wrapperOffsetX;
+            const maxX = viewportRect.width - MARGIN_X - wrapperOffsetX;
+
+            // Y軸の制限
+            const minY = MARGIN_Y - scaledHeight - wrapperOffsetY;
+            const maxY = viewportRect.height - MARGIN_Y - wrapperOffsetY;
+
+            // 制限の適用
+            finalX = Math.max(minX, Math.min(maxX, pan.x));
+            finalY = Math.max(minY, Math.min(maxY, pan.y));
+
+            const finalWrapperWidth = `${actualWidth * scale}px`;
+            const finalWrapperHeight = `${actualHeight * scale}px`;
+            wrapperRef.current.style.width = finalWrapperWidth;
+            wrapperRef.current.style.height = finalWrapperHeight;
+            wrapperRef.current.style.minWidth = finalWrapperWidth;
+            wrapperRef.current.style.minHeight = finalWrapperHeight;
+        }
+
+        // 計算後の正しい座標を Ref に上書き保存する（見えない壁での空回り防止）
+        panRef.current = { x: finalX, y: finalY };
+
         if (innerRef.current) {
-            innerRef.current.style.transform = `translate3d(${panRef.current.x}px, ${panRef.current.y}px, 0) scale(${scaleRef.current})`;
+            innerRef.current.style.transform = `translate3d(${finalX}px, ${finalY}px, 0) scale(${scale})`;
         }
         if (wrapperRef.current) {
-            const scaledWidth = `${baseWidthPx * scaleRef.current}px`;
-            const scaledHeight = `${baseHeightPx * scaleRef.current}px`;
+            const scaledWidth = `${baseWidthPx * scale}px`;
+            const scaledHeight = `${baseHeightPx * scale}px`;
 
             wrapperRef.current.style.width = scaledWidth;
             wrapperRef.current.style.height = scaledHeight;
@@ -82,6 +127,7 @@ export const Preview: React.FC = () => {
             wrapperRef.current.style.minHeight = scaledHeight;
         }
     }, [baseWidthPx, baseHeightPx]);
+
     // スケーリングの更新処理
     const updateScale = React.useCallback((forcedSize?: typeof contentSize, forceReset: boolean = false) => {
         const viewport = viewportRef.current;
@@ -178,7 +224,7 @@ export const Preview: React.FC = () => {
                 isManualZoomRef.current = true;
                 scaleRef.current = newScale; // StateではなくRefを更新
 
-                applyTransformToDOM();
+                applyTransformToDOM(panRef.current, newScale);
             }
         };
 
@@ -221,7 +267,7 @@ export const Preview: React.FC = () => {
                 isManualZoomRef.current = true;
                 scaleRef.current = newScale; // StateではなくRefを更新
 
-                applyTransformToDOM();
+                applyTransformToDOM(panRef.current, newScale);
 
                 // ホイールが止まってから150ms後にStateに反映
                 if (wheelTimeout) clearTimeout(wheelTimeout);
@@ -304,7 +350,7 @@ export const Preview: React.FC = () => {
             y: panRef.current.y + dy
         };
 
-        applyTransformToDOM();
+        applyTransformToDOM(panRef.current, scaleRef.current);
 
         lastPanPos.current = { x: e.clientX, y: e.clientY };
     };
@@ -358,7 +404,9 @@ export const Preview: React.FC = () => {
                             transformOrigin: 'top left',
                         } as React.CSSProperties}
                     >
-                        {renderContent()}
+                        <ErrorBoundary key={`${previewMode}-${selectedTemplateId}`}>
+                            {renderContent()}
+                        </ErrorBoundary>
                     </Box>
                 </Box>
             </Box>

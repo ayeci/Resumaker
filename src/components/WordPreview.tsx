@@ -23,18 +23,33 @@ export function WordPreview({ templateBuffer, resume, options, onSizeChange }: W
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        // Wordプレビューは現状1ページ想定、または内容に応じた高さになる
-        // 一旦標準的なA4サイズを通知しておく
-        if (onSizeChange) {
-            const a4WidthPx = 210 * 3.78;
-            const a4HeightPx = 297 * 3.78;
+        const container = containerRef.current;
+        if (!container || !onSizeChange) return;
+
+        // 2. ResizeObserver でコンテナの実際のDOMサイズを監視する
+        const observer = new ResizeObserver(() => {
+            // scrollWidth / scrollHeight を使うことで、
+            // 「A3見開き」や「はみ出た複数ページ」の総延長を正確に取得できます
+            const actualWidth = container.scrollWidth;
+            const actualHeight = container.scrollHeight;
+
+            // 高さが0など、まだ描画されていない状態のときは無視する
+            if (actualWidth === 0 || actualHeight === 0) return;
+
             onSizeChange({
-                fitWidth: a4WidthPx,
-                fitHeight: a4HeightPx,
-                totalWidth: a4WidthPx,
-                totalHeight: a4HeightPx // TODO: 実測が必要
+                fitWidth: actualWidth,
+                fitHeight: actualHeight,
+                totalWidth: actualWidth,
+                totalHeight: actualHeight
             });
-        }
+        });
+
+        // 監視スタート
+        observer.observe(container);
+
+        return () => {
+            observer.disconnect();
+        };
     }, [onSizeChange]);
 
     useEffect(() => {
@@ -53,7 +68,7 @@ export function WordPreview({ templateBuffer, resume, options, onSizeChange }: W
                     containerRef.current.innerHTML = ''; // 以前のコンテンツをクリア
                     await renderAsync(blob, containerRef.current, undefined, {
                         className: "docx-preview-content", // スタイリング用のオプションクラス
-                        inWrapper: true, // ラッパーを使用
+                        inWrapper: false,
                         ignoreWidth: false,
                         ignoreHeight: false,
                         ignoreFonts: false,

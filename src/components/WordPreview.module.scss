@@ -14,9 +14,16 @@
             background-color: transparent !important;
             margin: 0 !important;
 
-            .docx-preview-content {
-                box-shadow: 0px 3px 3px -2px rgba(0, 0, 0, 0.2), 0px 3px 4px 0px rgba(0, 0, 0, 0.14), 0px 1px 8px 0px rgba(0, 0, 0, 0.12) !important;
+            @media print {
+                background-color: transparent !important;
+                padding: 0 !important;
+                margin: 0 !important;
             }
+        }
+
+        .docx-preview-content {
+            box-shadow: 0px 3px 3px -2px rgba(0, 0, 0, 0.2), 0px 3px 4px 0px rgba(0, 0, 0, 0.14), 0px 1px 8px 0px rgba(0, 0, 0, 0.12) !important;
+            background-color: #ffffff !important;
         }
     }
 
@@ -39,21 +46,38 @@
 }
 
 .contentContainer {
+    height: 100%;
     min-height: 100%;
-    padding: 0;
+
+    // ページを縦に並べる
+    display: flex;
+    flex-direction: column;
+
+    // 左上を基準にしてパン制限の計算を合わせる
+    align-items: flex-start;
+    justify-content: flex-start;
+
+    // 最も幅の広いページに合わせてコンテナの幅を決める
+    width: max-content;
+
+    // 背景は透明にしておく（この後ろにある画面全体の背景色が見えるようになります）
+    background-color: transparent;
+
+    // コンテナ全体の余白と、ページとページの間の隙間
+    padding: 32px;
+    gap: 24px;
+
+    // 🌟 ここがポイント！
+    // 分離した各セクション（ページ）を「1枚の独立した紙」としてスタイリングする
+    :global(.docx-preview-content) {
+        background-color: #ffffff !important; // 紙の色を真っ白に
+        margin: 0 !important; // 親の gap で24pxの隙間を作るので、ライブラリが勝手につけるmarginは消す
+    }
 
     @media print {
         height: auto !important;
         min-height: 0 !important;
         overflow: visible !important;
         position: static !important;
-    }
-}
-
-@media print {
-    div[class="docx-preview-content-wrapper"] {
-        background-color: transparent !important;
-        padding: 0 !important;
-        margin: 0 !important;
     }
 }
