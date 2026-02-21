@@ -580,14 +580,22 @@ export const generateExcelFromData = async (data: ExportData, templateFile: File
     const arrayBuffer = await toArrayBuffer(templateFile);
     const zip = new PizZip(arrayBuffer);
 
-    const sharedStringsXml = zip.file('xl/sharedStrings.xml')?.asText();
+    let sharedStringsXml = zip.file('xl/sharedStrings.xml')?.asText();
     if (!sharedStringsXml) throw new Error('sharedStrings.xml missing');
+
+    // モバイル(携帯)等のルビ(phonetic runs)が表示される問題の修正
+    // テンプレート由来の静的テキストにも含まれている場合があるため、全体からルビタグを取り除く
+    sharedStringsXml = sharedStringsXml.replace(/<rPh[^>]*>.*?<\/rPh>/gs, '');
+    sharedStringsXml = sharedStringsXml.replace(/<phoneticPr[^>]*\/>/gs, '');
+    // zipの内容を更新しておく(後でssReplacementsが無くても反映されるようにする)
+    zip.file('xl/sharedStrings.xml', sharedStringsXml);
 
     const sharedStrings: string[] = [];
     const siRegex = /<si>(.*?)<\/si>/gs;
     let siMatch;
     while ((siMatch = siRegex.exec(sharedStringsXml)) !== null) {
-        const siContent = siMatch[1].replace(/<rPh[^>]*>.*?<\/rPh>/gs, '');
+        // 先に削除しているので siContent の rPh 除去は不要だが、念のため残すか外すか。外してOK
+        const siContent = siMatch[1];
         const tPattern = /<t[^>]*>(.*?)<\/t>/gs;
         let fullText = '';
         let tMatch;
@@ -606,6 +614,13 @@ export const generateExcelFromData = async (data: ExportData, templateFile: File
         if (!sheetFile) continue;
         let sheetXml = sheetFile.asText();
         let sheetUpdated = false;
+
+        // シート内のインライン文字列などにもルビが含まれる可能性があるため、念のため除去
+        if (sheetXml.includes('<rPh') || sheetXml.includes('<phoneticPr')) {
+            sheetXml = sheetXml.replace(/<rPh[^>]*>.*?<\/rPh>/gs, '');
+            sheetXml = sheetXml.replace(/<phoneticPr[^>]*\/>/gs, '');
+            sheetUpdated = true;
+        }
 
         const cellWithS = /<c r="([A-Z]+\d+)"[^>]* t="s"[^>]*><v>(\d+)<\/v><\/c>/g;
         let cellMatch;
