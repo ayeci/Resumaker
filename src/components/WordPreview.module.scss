@@ -6,7 +6,7 @@
 
 .wordPreviewContainer {
     width: 100%;
-    height: 100%;
+    height: max-content;
     overflow: visible !important;
 
     :global {
@@ -46,8 +46,8 @@
 }
 
 .contentContainer {
-    height: 100%;
-    min-height: 100%;
+    height: max-content;
+    box-sizing: border-box;
 
     // ページを縦に並べる
     display: flex;
@@ -67,7 +67,6 @@
     padding: 32px;
     gap: 24px;
 
-    // 🌟 ここがポイント！
     // 分離した各セクション（ページ）を「1枚の独立した紙」としてスタイリングする
     :global(.docx-preview-content) {
         background-color: #ffffff !important; // 紙の色を真っ白に

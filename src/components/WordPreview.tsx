@@ -22,6 +22,9 @@ export function WordPreview({ templateBuffer, resume, options, onSizeChange }: W
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    // 無限ループ防止用のサイズ記録Refを追加
+    const lastSize = useRef({ width: 0, height: 0 });
+
     useEffect(() => {
         const container = containerRef.current;
         if (!container || !onSizeChange) return;
@@ -35,6 +38,12 @@ export function WordPreview({ templateBuffer, resume, options, onSizeChange }: W
 
             // 高さが0など、まだ描画されていない状態のときは無視する
             if (actualWidth === 0 || actualHeight === 0) return;
+
+            // 前回のサイズと同じな場合は通知をスキップ（無限ループの防波堤）
+            if (lastSize.current.width === actualWidth && lastSize.current.height === actualHeight) {
+                return;
+            }
+            lastSize.current = { width: actualWidth, height: actualHeight };
 
             onSizeChange({
                 fitWidth: actualWidth,

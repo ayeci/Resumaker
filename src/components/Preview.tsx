@@ -4,7 +4,8 @@
  * Released under the MIT License.
  */
 
-import React, { Suspense, useState, useRef, useEffect, useLayoutEffect } from 'react';
+import React, { Suspense, useState, useRef, useEffect, useLayoutEffect, lazy, useCallback } from 'react';
+import type { CSSProperties, PointerEvent } from 'react';
 import { useResume } from '../context/ResumeHooks';
 import styles from './Preview.module.scss';
 import clsx from 'clsx';
@@ -15,7 +16,7 @@ import { RotateCcw } from 'lucide-react';
 import { usePreviewTrigger } from '../hooks/usePreviewTrigger';
 import { ErrorBoundary } from './ErrorBoundary';
 
-const ExcelPreview = React.lazy(() => import('./ExcelPreview'));
+const ExcelPreview = lazy(() => import('./ExcelPreview'));
 const MM_TO_PX = 3.78;
 
 export const Preview: React.FC = () => {
@@ -34,25 +35,21 @@ export const Preview: React.FC = () => {
     const initialScale = useRef<number>(1);
     const isManualZoomRef = useRef(false);
 
+    // 2本指での「ズームしながらパン」を可能にするための指の中心点トラッカー
+    const lastTouchCenter = useRef({ x: 0, y: 0 });
+
     // 1. 操作したいDOM要素（インスタンス）を保持する変数
     const innerRef = useRef<HTMLDivElement>(null);
 
-    // 2. 座標データ（計算用の最新値）を保持する変数
-    // ※ useState ではなく useRef を使うことで、値を書き換えても「再描画」を発生させない
+    // 2. 座標データとズーム倍率（計算用の絶対的な最新値）を保持する変数
     const panRef = useRef({ x: 0, y: 0 });
 
-    // 3. ズーム倍率も同様に Ref で持っておくと同期が楽です
+    // 3. ズーム倍率も同様に Ref で持っておくと同期が楽
     const scaleRef = useRef(scale);
-
-    // Stateが更新されたら、こっそり Ref も同期しておく（初期化・ボタンリセット用）
-    useEffect(function syncRefs() {
-        panRef.current = pan;
-        scaleRef.current = scale;
-    }, [pan, scale]);
 
     const selectedTemplate = templates.find(t => t.id === selectedTemplateId) ?? null;
 
-    // コンテンツから報告されたサイズ（論理サイズ）
+    // コンテンツから報告されたサイズ（論理サイズ, defaultはA4サイズ基準）
     const [contentSize, setContentSize] = useState({
         fitWidth: A4_WIDTH_MM * MM_TO_PX,
         fitHeight: A4_HEIGHT_MM * MM_TO_PX,
@@ -65,14 +62,12 @@ export const Preview: React.FC = () => {
     const baseWidthPx = contentSize.totalWidth + currentPadding;
     const baseHeightPx = contentSize.totalHeight + currentPadding;
 
-
     /** DOM直接操作用の共通ヘルパー関数 */
-    const applyTransformToDOM = React.useCallback((pan: { x: number, y: number }, scale: number) => {
+    const applyTransformToDOM = useCallback((pan: { x: number, y: number }, scale: number) => {
         let finalX = pan.x;
         let finalY = pan.y;
-        if (viewportRef.current && wrapperRef.current) {
-            // Viewport と Wrapper の「実際の画面上の位置」を取得
-            // （DOMを書き換える前に取得するので、パフォーマンス低下の心配はありません）
+
+        if (viewportRef.current && wrapperRef.current && innerRef.current) {
             const viewportRect = viewportRef.current.getBoundingClientRect();
             const wrapperRect = wrapperRef.current.getBoundingClientRect();
 
@@ -80,56 +75,55 @@ export const Preview: React.FC = () => {
             const wrapperOffsetX = wrapperRect.left - viewportRect.left;
             const wrapperOffsetY = wrapperRect.top - viewportRect.top;
 
-            // 子コンポーネントからの自己申告サイズだけでなく、
-            // 実際のDOM（Wordの複数ページ等であふれた分）の scrollWidth / scrollHeight も見て、大きい方を採用する
-            const actualWidth = innerRef.current ? Math.max(baseWidthPx, innerRef.current.scrollWidth) : baseWidthPx;
-            const actualHeight = innerRef.current ? Math.max(baseHeightPx, innerRef.current.scrollHeight) : baseHeightPx;
+            const actualWidth = Math.max(baseWidthPx, innerRef.current.scrollWidth);
+            const actualHeight = Math.max(baseHeightPx, innerRef.current.scrollHeight);
 
-            const scaledWidth = baseWidthPx * scale;
-            const scaledHeight = baseHeightPx * scale;
+            const scaledWidth = actualWidth * scale;
+            const scaledHeight = actualHeight * scale;
 
             const MARGIN_X = Math.min(100, viewportRect.width * 0.2);
             const MARGIN_Y = Math.min(100, viewportRect.height * 0.2);
 
-            // X軸の制限
-            const minX = MARGIN_X - scaledWidth - wrapperOffsetX;
-            const maxX = viewportRect.width - MARGIN_X - wrapperOffsetX;
+            // 画面より小さい場合はJSで中央寄せし、大きい場合は端で止める
+            const freeSpaceX = viewportRect.width - scaledWidth;
+            let minX, maxX;
+            if (freeSpaceX > 0) {
+                const centerX = freeSpaceX / 2 - wrapperOffsetX;
+                minX = centerX;
+                maxX = centerX;
+            } else {
+                const limitLeft = viewportRect.width - scaledWidth - wrapperOffsetX - MARGIN_X;
+                const limitRight = MARGIN_X - wrapperOffsetX;
+                minX = Math.min(limitLeft, limitRight);
+                maxX = Math.max(limitLeft, limitRight);
+            }
 
-            // Y軸の制限
-            const minY = MARGIN_Y - scaledHeight - wrapperOffsetY;
-            const maxY = viewportRect.height - MARGIN_Y - wrapperOffsetY;
+            const freeSpaceY = viewportRect.height - scaledHeight;
+            let minY, maxY;
+            if (freeSpaceY > 0) {
+                const centerY = freeSpaceY / 2 - wrapperOffsetY;
+                minY = centerY;
+                maxY = centerY;
+            } else {
+                const limitTop = viewportRect.height - scaledHeight - wrapperOffsetY - MARGIN_Y;
+                const limitBottom = MARGIN_Y - wrapperOffsetY;
+                minY = Math.min(limitTop, limitBottom);
+                maxY = Math.max(limitTop, limitBottom);
+            }
 
-            // 制限の適用
             finalX = Math.max(minX, Math.min(maxX, pan.x));
             finalY = Math.max(minY, Math.min(maxY, pan.y));
-
-            const finalWrapperWidth = `${actualWidth * scale}px`;
-            const finalWrapperHeight = `${actualHeight * scale}px`;
-            wrapperRef.current.style.width = finalWrapperWidth;
-            wrapperRef.current.style.height = finalWrapperHeight;
-            wrapperRef.current.style.minWidth = finalWrapperWidth;
-            wrapperRef.current.style.minHeight = finalWrapperHeight;
         }
 
-        // 計算後の正しい座標を Ref に上書き保存する（見えない壁での空回り防止）
         panRef.current = { x: finalX, y: finalY };
 
         if (innerRef.current) {
             innerRef.current.style.transform = `translate3d(${finalX}px, ${finalY}px, 0) scale(${scale})`;
         }
-        if (wrapperRef.current) {
-            const scaledWidth = `${baseWidthPx * scale}px`;
-            const scaledHeight = `${baseHeightPx * scale}px`;
-
-            wrapperRef.current.style.width = scaledWidth;
-            wrapperRef.current.style.height = scaledHeight;
-            wrapperRef.current.style.minWidth = scaledWidth;
-            wrapperRef.current.style.minHeight = scaledHeight;
-        }
     }, [baseWidthPx, baseHeightPx]);
 
     // スケーリングの更新処理
-    const updateScale = React.useCallback((forcedSize?: typeof contentSize, forceReset: boolean = false) => {
+    const updateScale = useCallback((forcedSize?: typeof contentSize, forceReset: boolean = false) => {
         const viewport = viewportRef.current;
         if (!viewport) return;
 
@@ -137,41 +131,48 @@ export const Preview: React.FC = () => {
         // モバイルではスクロールバーの出現/消失による ResizeObserver 無限ループ（Reactのクラッシュ、真っ白な画面）を防ぐため、
         // viewport.clientWidth を避け window.innerWidth で固定します。
         const parentWidth = isMobile ? window.innerWidth : (viewport.clientWidth > 0 ? viewport.clientWidth : window.innerWidth);
-
         const size = forcedSize || contentSize;
 
         // テンプレートモードではパディングなし、通常プレビューでは 32px (1rem*2)
-        const currentPadding = previewMode === 'template' ? 0 : 32;
         const contentFitWidthWithPadding = size.fitWidth + currentPadding;
 
         let newScale = 1;
 
         if (isMobile) {
-            // モバイル: 表示可能領域の横幅いっぱいにフィット (ウインドウの端に合わせる)
-            // 少しだけ余白を見込むため 0.96 などをかけるか、単に parentWidth をパディング込みで計算
             newScale = size.fitWidth > 0 ? (parentWidth) / contentFitWidthWithPadding : 1;
         } else {
-            // PC: ユーザー要望により 100% 表示を基本とする (縮小フィットさせない)
             newScale = 1.0;
         }
 
-        // 下限設定
         const finalNewScale = Math.max(newScale, 0.1);
         setBaseScale(finalNewScale);
 
-        setScale(prev => {
-            // 手動ズーム中で、強制リセットでない場合は現在の倍率を維持
-            if (!forceReset && isManualZoomRef.current) return prev;
+        let nextScale = finalNewScale;
+
+        setScale(() => {
+            if (!forceReset && isManualZoomRef.current) {
+                // 手動ズーム中は「過去のState(prev)」ではなく、絶対的な「最新のRef」を正として維持する
+                nextScale = scaleRef.current;
+                return scaleRef.current;
+            }
+            scaleRef.current = finalNewScale;
             return finalNewScale;
         });
-    }, [contentSize, previewMode]);
+
+        requestAnimationFrame(() => {
+            const targetPan = forceReset ? { x: 0, y: 0 } : panRef.current;
+            applyTransformToDOM(targetPan, nextScale);
+            setPan({ ...panRef.current });
+        });
+
+    }, [contentSize, currentPadding, applyTransformToDOM]);
 
     // 子コンポーネントからのサイズ変更通知
-    const handleSizeChange = React.useCallback((size: typeof contentSize) => {
+    const handleSizeChange = useCallback((size: typeof contentSize) => {
         setContentSize(size);
     }, []);
 
-    // ウィンドウリサイズによるコンテナサイズ監視 (ResizeObserverの無限ループ回避のため)
+    // ウィンドウリサイズによるコンテナサイズ監視
     useLayoutEffect(() => {
         const handleResize = () => {
             if (!isManualZoomRef.current) {
@@ -179,67 +180,135 @@ export const Preview: React.FC = () => {
             }
         };
 
-        // 初期ロード時にも一回実行
         handleResize();
-
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, [updateScale]);
 
-    // モード切替時にスケーリングをリセット
-    useEffect(() => {
-        const frameId = requestAnimationFrame(() => {
-            isManualZoomRef.current = false;
-            updateScale(undefined, true);
-            setPan({ x: 0, y: 0 });
-        });
-        return () => cancelAnimationFrame(frameId);
-    }, [previewMode, selectedTemplateId, updateScale]);
+    // モード・テンプレート切替時にスケーリングをリセット
+    const currentModeAndTemplate = `${previewMode}-${selectedTemplateId}`;
+    const previousModeAndTemplate = useRef(currentModeAndTemplate);
 
-    // ピンチ操作の登録
+    useLayoutEffect(() => {
+        if (previousModeAndTemplate.current !== currentModeAndTemplate) {
+            previousModeAndTemplate.current = currentModeAndTemplate; // フラグは同期的に即座に更新する
+
+            // リンターエラー回避のため、requestAnimationFrameで遅延実行
+            const frameId = requestAnimationFrame(() => {
+                isManualZoomRef.current = false;
+                updateScale(undefined, true);
+            });
+
+            return () => cancelAnimationFrame(frameId);
+        }
+    }, [currentModeAndTemplate, updateScale]);
+
+    // タッチ操作の登録
     useEffect(() => {
         const element = wrapperRef.current;
         if (!element) return;
 
         const handleTouchStart = (e: TouchEvent) => {
-            if (e.touches.length === 2) {
+            if (e.touches.length === 1) {
+                // 1本指はパン（移動）操作
+                isDraggingRef.current = true;
+                lastPanPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            } else if (e.touches.length === 2) {
+                // 2本指はズーム＆パン操作
+                isDraggingRef.current = false;
                 const dist = Math.hypot(
                     e.touches[0].pageX - e.touches[1].pageX,
                     e.touches[0].pageY - e.touches[1].pageY
                 );
                 initialDistance.current = dist;
                 initialScale.current = scaleRef.current;
+
+                // 初期タッチ時の2本指の中心点を記録
+                const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                if (viewportRef.current) {
+                    const rect = viewportRef.current.getBoundingClientRect();
+                    lastTouchCenter.current = { x: centerX - rect.left, y: centerY - rect.top };
+                }
             }
         };
 
         const handleTouchMove = (e: TouchEvent) => {
-            if (e.touches.length === 2 && initialDistance.current !== null) {
+            if (e.touches.length === 1 && isDraggingRef.current) {
+                // 1本指でのパン
+                if (e.cancelable) e.preventDefault();
+                const dx = e.touches[0].clientX - lastPanPos.current.x;
+                const dy = e.touches[0].clientY - lastPanPos.current.y;
+                const newPan = {
+                    x: panRef.current.x + dx,
+                    y: panRef.current.y + dy
+                };
+
+                isManualZoomRef.current = true;
+                applyTransformToDOM(newPan, scaleRef.current);
+                lastPanPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+
+            } else if (e.touches.length === 2 && initialDistance.current !== null) {
+                // 2本指でのズーム＆パン
                 if (e.cancelable) e.preventDefault();
                 const dist = Math.hypot(
                     e.touches[0].pageX - e.touches[1].pageX,
                     e.touches[0].pageY - e.touches[1].pageY
                 );
                 const delta = dist / initialDistance.current;
-                const newScale = Math.min(Math.max(initialScale.current * delta, 0.1), 3);
-                isManualZoomRef.current = true;
-                scaleRef.current = newScale; // StateではなくRefを更新
+                const newScale = Math.min(Math.max(initialScale.current * delta, 0.1), 5.0);
 
-                applyTransformToDOM(panRef.current, newScale);
+                const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+
+                if (viewportRef.current) {
+                    const rect = viewportRef.current.getBoundingClientRect();
+                    const mouseX = centerX - rect.left;
+                    const mouseY = centerY - rect.top;
+
+                    // 1. ズームの基準点を中心にするための座標補正
+                    const scaleRatio = newScale / scaleRef.current;
+                    const newPan = {
+                        x: mouseX - (mouseX - panRef.current.x) * scaleRatio,
+                        y: mouseY - (mouseY - panRef.current.y) * scaleRatio
+                    };
+
+                    // 2. ズームしながらの「パン（平行移動）」を加算
+                    newPan.x += mouseX - lastTouchCenter.current.x;
+                    newPan.y += mouseY - lastTouchCenter.current.y;
+
+                    isManualZoomRef.current = true;
+                    scaleRef.current = newScale;
+                    lastTouchCenter.current = { x: mouseX, y: mouseY };
+
+                    // 操作中はDOMのみ更新
+                    applyTransformToDOM(newPan, newScale);
+                }
             }
         };
 
-        const handleTouchEnd = () => {
-            if (initialDistance.current !== null) {
+        const handleTouchEnd = (e: TouchEvent) => {
+            if (e.touches.length === 0) {
+                // 全ての指が離れた時、結果を確定させる
+                if (isDraggingRef.current || initialDistance.current !== null) {
+                    isDraggingRef.current = false;
+                    initialDistance.current = null;
+                    applyTransformToDOM(panRef.current, scaleRef.current);
+                    setScale(scaleRef.current);
+                    setPan({ ...panRef.current }); // 新規オブジェクトを渡してボタンを確実に出現させる
+                }
+            } else if (e.touches.length === 1) {
+                // 2本指から1本指に減った際のジャンプ防止
                 initialDistance.current = null;
-                // 指を離したタイミングでStateに反映
-                setScale(scaleRef.current);
+                isDraggingRef.current = true;
+                lastPanPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
             }
         };
 
         element.addEventListener('touchstart', handleTouchStart, { passive: false });
         element.addEventListener('touchmove', handleTouchMove, { passive: false });
         element.addEventListener('touchend', handleTouchEnd);
-        element.addEventListener('touchcancel', handleTouchEnd); // touchend / touchcancel 両方に設定
+        element.addEventListener('touchcancel', handleTouchEnd);
 
         return () => {
             element.removeEventListener('touchstart', handleTouchStart);
@@ -249,7 +318,7 @@ export const Preview: React.FC = () => {
         };
     }, [applyTransformToDOM]);
 
-    // マウスホイールでのズーム操作の登録
+    // マウスホイールでのズーム・パン操作の登録
     useEffect(() => {
         const container = viewportRef.current;
         if (!container) return;
@@ -257,24 +326,44 @@ export const Preview: React.FC = () => {
         let wheelTimeout: NodeJS.Timeout | null = null;
 
         const handleWheel = (e: WheelEvent) => {
+            e.preventDefault(); // ブラウザ全体のスクロール・ズームを防ぐ
+            isManualZoomRef.current = true;
+
             if (e.ctrlKey || e.metaKey) {
-                e.preventDefault(); // ブラウザ全体のズームを防ぐ
-
-                const zoomSensitivity = 0.001;
+                // Ctrl + ホイール: ズーム操作
+                const zoomSensitivity = 0.002;
                 const delta = -e.deltaY * zoomSensitivity;
+                const newScale = Math.min(Math.max(scaleRef.current + delta, 0.1), 5.0);
 
-                const newScale = Math.min(Math.max(scaleRef.current + delta, 0.1), 3.0);
-                isManualZoomRef.current = true;
+                // マウスカーソルの位置をズームの基準点にする
+                const rect = container.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+
+                const scaleRatio = newScale / scaleRef.current;
+                const newPan = {
+                    x: mouseX - (mouseX - panRef.current.x) * scaleRatio,
+                    y: mouseY - (mouseY - panRef.current.y) * scaleRatio
+                };
+
                 scaleRef.current = newScale; // StateではなくRefを更新
-
-                applyTransformToDOM(panRef.current, newScale);
-
-                // ホイールが止まってから150ms後にStateに反映
-                if (wheelTimeout) clearTimeout(wheelTimeout);
-                wheelTimeout = setTimeout(() => {
-                    setScale(scaleRef.current);
-                }, 150);
+                applyTransformToDOM(newPan, newScale);
+            } else {
+                // 通常ホイール: スクロール（パン操作）
+                const newPan = {
+                    x: panRef.current.x - e.deltaX,
+                    y: panRef.current.y - e.deltaY
+                };
+                applyTransformToDOM(newPan, scaleRef.current);
             }
+
+            // ホイールが止まってから150ms後にStateに反映してサイズを確定
+            if (wheelTimeout) clearTimeout(wheelTimeout);
+            wheelTimeout = setTimeout(() => {
+                applyTransformToDOM(panRef.current, scaleRef.current);
+                setScale(scaleRef.current);
+                setPan({ ...panRef.current }); // 新規オブジェクトを渡す
+            }, 150);
         };
 
         container.addEventListener('wheel', handleWheel, { passive: false });
@@ -291,7 +380,6 @@ export const Preview: React.FC = () => {
                 e.preventDefault(); // ブラウザ標準のズームリセットを防ぐ
                 isManualZoomRef.current = false;
                 updateScale(undefined, true);
-                setPan({ x: 0, y: 0 });
             }
         };
 
@@ -328,41 +416,51 @@ export const Preview: React.FC = () => {
     };
 
     // パン（ドラッグ）用のイベントハンドラ
-    const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-        // メインボタン（左クリック）またはタッチの場合のみ処理
-        if (e.button !== 0 && e.pointerType === 'mouse') return;
+    const handlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
+        // マウスの左クリックのみを処理する（タッチ操作は無視して干渉を防ぐ）
+        if (e.pointerType !== 'mouse' || e.button !== 0) return;
 
         isDraggingRef.current = true; // StateではなくRefを更新
         lastPanPos.current = { x: e.clientX, y: e.clientY };
         e.currentTarget.setPointerCapture(e.pointerId);
+
+        if (viewportRef.current) viewportRef.current.style.cursor = 'grabbing';
     };
 
     // ズーム・パンのカクツキ対策でDOMのstyleを直接操作する
-    const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-        if (!isDraggingRef.current || initialDistance.current !== null) return;
+    const handlePointerMove = (e: PointerEvent<HTMLDivElement>) => {
+        if (e.pointerType !== 'mouse' || !isDraggingRef.current) return;
 
+        // 1. 差分を計算
         const dx = e.clientX - lastPanPos.current.x;
         const dy = e.clientY - lastPanPos.current.y;
 
-        // 座標データ(panRef)を更新（ここでは再描画は起きない）
-        panRef.current = {
+        // 2. 座標データ(panRef)を更新（ここでは再描画は起きない）
+        const newPan = {
             x: panRef.current.x + dx,
             y: panRef.current.y + dy
         };
 
-        applyTransformToDOM(panRef.current, scaleRef.current);
+        isManualZoomRef.current = true;
+
+        // 3. DOMのスタイルを直接上書き（ReactをバイパスしてGPUに命令）
+        applyTransformToDOM(newPan, scaleRef.current);
 
         lastPanPos.current = { x: e.clientX, y: e.clientY };
     };
 
-    const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-        if (!isDraggingRef.current) return;
+    const handlePointerUp = (e: PointerEvent<HTMLDivElement>) => {
+        if (e.pointerType !== 'mouse' || !isDraggingRef.current) return;
+
         isDraggingRef.current = false; // Refを戻す
         e.currentTarget.releasePointerCapture(e.pointerId);
 
+        if (viewportRef.current) viewportRef.current.style.cursor = 'grab';
+
         // ポインターアップ時に一回だけ State を更新して、DOM直接操作を React の世界に結果を報告する
-        setPan(panRef.current);
-        setScale(scaleRef.current);
+        applyTransformToDOM(panRef.current, scaleRef.current);
+        setScale(scaleRef.current); // ズーム後にドラッグしても倍率を確実に戻さない
+        setPan({ ...panRef.current });
     };
 
     return (
@@ -374,22 +472,18 @@ export const Preview: React.FC = () => {
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onPointerCancel={handlePointerUp}
-                style={{ cursor: 'grab', touchAction: 'none' }}
+                style={{ cursor: 'grab', touchAction: 'none', overflow: 'hidden' }}
             >
                 <Box
                     ref={wrapperRef}
                     className={clsx(styles.wrapper, previewMode === 'template' && styles.templateMode)}
                     style={{
-                        /* 物理的な「フットプリント」サイズをJSで確保 */
                         width: `${baseWidthPx * scale}px`,
                         height: `${baseHeightPx * scale}px`,
-
-                        /* モバイルなどでギリギリの時に吸着しないよう、
-                           少しだけ余白を持たせると安全です（任意）
-                        */
                         minWidth: `${baseWidthPx * scale}px`,
                         minHeight: `${baseHeightPx * scale}px`,
-                    } as React.CSSProperties}
+                        margin: 0,
+                    } as CSSProperties}
                 >
                     <Box
                         className={clsx(styles.inner, previewMode === 'template' && styles.templateInner)}
@@ -397,12 +491,10 @@ export const Preview: React.FC = () => {
                         style={{
                             width: `${baseWidthPx}px`,
                             height: `${baseHeightPx}px`,
-                            /* GPUアクセラレーションを強制 */
                             willChange: 'transform',
-                            /* ズームと移動を同時に適用（必ず translate → scale の順序） */
-                            transform: `translate3d(${pan.x}px, ${pan.y}px,0) scale(${scale})`,
+                            transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${scale})`,
                             transformOrigin: 'top left',
-                        } as React.CSSProperties}
+                        } as CSSProperties}
                     >
                         <ErrorBoundary key={`${previewMode}-${selectedTemplateId}`}>
                             {renderContent()}
@@ -428,7 +520,6 @@ export const Preview: React.FC = () => {
                         onClick={() => {
                             isManualZoomRef.current = false;
                             updateScale(undefined, true);
-                            setPan({ x: 0, y: 0 });
                         }}
                         style={{
                             backgroundColor: '#fff',
