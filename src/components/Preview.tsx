@@ -11,12 +11,11 @@ import styles from './Preview.module.scss';
 import clsx from 'clsx';
 import { WordPreview } from './WordPreview';
 import StandardPreview, { A4_WIDTH_MM, A4_HEIGHT_MM } from './StandardPreview';
-import { Box, IconButton, Tooltip, Typography } from '@mui/material';
+import { Box, IconButton, Tooltip } from '@mui/material';
 import { RotateCcw } from 'lucide-react';
 import { usePreviewTrigger } from '../hooks/usePreviewTrigger';
 import { ErrorBoundary } from './ErrorBoundary';
 import { templateFileStore } from '../store/fileStore';
-import { checkIsMobile } from '../utils/device';
 import { SESSION_KEYS } from '../utils/sessionKeys';
 import { useNotification } from './NotificationContext';
 
@@ -28,13 +27,7 @@ export const Preview: React.FC = () => {
     const { resume, templates, selectedTemplateId, previewMode, exportOptions, flushCount } = useResume();
     const [isLoading, setIsLoading] = useState(false);
 
-    // モバイル判定
-    const [isMobileEnv, setIsMobileEnv] = useState(checkIsMobile());
-    useLayoutEffect(() => {
-        const handleResize = () => setIsMobileEnv(checkIsMobile());
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
+
 
     // デバウンス済みのプレビュー用履歴書データ
     const { previewResume } = usePreviewTrigger(resume, flushCount);
@@ -471,21 +464,6 @@ export const Preview: React.FC = () => {
 
     const renderContent = () => {
         if (previewMode === 'template' && selectedTemplate) {
-            // モバイル環境の場合はプレビューを描画せず、メッセージを表示
-            if (isMobileEnv) {
-                return (
-                    <Box sx={{ p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', color: 'text.secondary' }}>
-                        <Typography variant="h6" gutterBottom>プレビュー非表示</Typography>
-                        <Typography variant="body2" sx={{ lineHeight: 1.8 }}>
-                            モバイル端末でのメモリ不足（ブラウザの強制終了）を防ぐため、<br />
-                            テンプレートのプレビュー表示を制限しています。<br /><br />
-                            データは正常に読み込まれています。<br />
-                            メニューからファイルを出力してご確認ください。
-                        </Typography>
-                    </Box>
-                );
-            }
-
             if (!actualFile) {
                 return <div>ファイルが見つかりません</div>;
             }
