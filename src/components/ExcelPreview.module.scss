@@ -5,7 +5,9 @@
  */
 
 .excelPreviewContainer {
-    /* 親 (Preview.tsx) から渡される width/height を尊重 */
+    /* 親 (Preview.tsx) からCSS変数で渡されるwidth/heightを使用 */
+    width: var(--preview-w, 100%);
+    height: var(--preview-h, 100%);
     position: relative;
     box-sizing: border-box;
     background-color: #ffffff;

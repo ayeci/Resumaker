@@ -4,16 +4,58 @@
  * Released under the MIT License.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Workbook } from '@fortune-sheet/react';
 import type { Sheet, Image } from '@fortune-sheet/core';
-import type { IfortuneSheet, IfortuneImageDefault, IfortuneSheetConfig } from '@zenmrp/fortune-sheet-excel/dist/ToFortuneSheet/IFortune';
+import type {
+    IfortuneSheet,
+    IfortuneImageDefault,
+    IfortuneSheetConfig,
+    IfortuneSheetCelldata,
+    IfortuneSheetborderInfoCellForImp,
+    IfortuneSheetSelection
+} from '@zenmrp/fortune-sheet-excel/dist/ToFortuneSheet/IFortune';
 import '@fortune-sheet/react/dist/index.css';
 import styles from './ExcelPreview.module.scss';
 import type { ResumeConfig } from '../types/resume';
 import { useExcelWorker } from '../hooks/useExcelWorker';
 import { useNotification } from './NotificationContext';
 import { DEFAULT_ROW_HEIGHT, DEFAULT_COL_WIDTH, EXCEL_MAX_ROW, EXCEL_MAX_COL } from '../utils/excel';
+
+/** Worker側で printAreaBounds を付与した拡張シート型 */
+interface PrintAreaBounds {
+    r1: number;
+    c1: number;
+    r2: number;
+    c2: number;
+}
+
+/** IfortuneSheet + Worker追加プロパティの統合型 */
+interface ExcelSheet extends IfortuneSheet {
+    printAreaBounds?: PrintAreaBounds;
+    data?: (Record<string, unknown> | null)[][];
+}
+
+/**
+ * borderInfo の各エントリは rangeType が 'cell' か 'range' で構造が異なる。
+ * 型ライブラリが正確にユニオンを提供しないため、ここで明示する。
+ */
+type BorderInfoEntry = IfortuneSheetborderInfoCellForImp & {
+    rangeType: string;
+    row_index?: number;
+    col_index?: number;
+    range?: IfortuneSheetSelection[];
+    value?: {
+        row_index?: number;
+        col_index?: number;
+        l?: { style: number; color: string };
+    };
+};
+
+/** LuckySheet のグローバルAPI（クリーンアップ用） */
+interface LuckySheetGlobal {
+    luckysheet?: { destroy: () => void };
+}
 
 interface ExcelPreviewProps {
     file: File;
@@ -58,6 +100,9 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ file, resume, width, height
     // プレビューの強制再描画用キー
     const [previewKey, setPreviewKey] = useState(0);
 
+    // コンテナの参照（動的なスタイル適用用）
+    const containerRef = useRef<HTMLDivElement>(null);
+
     // Web Worker カスタムフック
     const { generatePreview, isLoading } = useExcelWorker();
 
@@ -77,6 +122,15 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ file, resume, width, height
             }, 0);
         }
         return () => clearTimeout(timer);
+    }, [width, height]);
+
+    // 動的なサイズ（CSS変数）をDOMに直接セットしてJSXのstyle属性を排除
+    useEffect(() => {
+        const el = containerRef.current;
+        if (el) {
+            el.style.setProperty('--preview-w', width ? `${width}px` : '100%');
+            el.style.setProperty('--preview-h', height ? `${height}px` : '100%');
+        }
     }, [width, height]);
 
     useEffect(() => {
@@ -228,11 +282,12 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ file, resume, width, height
                             celldata: [],
                         } as unknown as Sheet];
                     } else {
-                        finalSheets.forEach((s: any, i: number) => {
-                            if (s.id === undefined) s.id = String(i + 1);
-                            if (s.status === undefined) s.status = i === 0 ? 1 : 0;
-                            if (s.order === undefined) s.order = i;
-                            if (!s.name) s.name = `Sheet${i + 1}`;
+                        finalSheets.forEach((s: Sheet, i: number) => {
+                            const mutable = s as Sheet & { id?: string; status?: number; order?: number; name?: string };
+                            if (mutable.id === undefined) mutable.id = String(i + 1);
+                            if (mutable.status === undefined) mutable.status = i === 0 ? 1 : 0;
+                            if (mutable.order === undefined) mutable.order = i;
+                            if (!mutable.name) mutable.name = `Sheet${i + 1}`;
                         });
                     }
 
@@ -241,15 +296,14 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ file, resume, width, height
 
                     // 印刷範囲に基づいたサイズを親に通知
                     if (onSizeChange && finalSheets.length > 0) {
-                        const sheet = finalSheets[0] as unknown as IfortuneSheet;
+                        const sheet = finalSheets[0] as unknown as ExcelSheet;
                         const config = (sheet.config || {}) as IfortuneSheetConfig;
                         const rowlen = (config.rowlen || {}) as Record<string | number, number>;
                         const columnlen = (config.columnlen || {}) as Record<string | number, number>;
 
                         // ここで正しいデフォルト幅を取得しておく
-                        const safeSheet = sheet as any;
-                        const defaultColWidth = safeSheet.defaultColWidth ?? DEFAULT_COL_WIDTH;
-                        const defaultRowHeight = safeSheet.defaultRowHeight ?? DEFAULT_ROW_HEIGHT;
+                        const defaultColWidth = sheet.defaultColWidth ?? DEFAULT_COL_WIDTH;
+                        const defaultRowHeight = sheet.defaultRowHeight ?? DEFAULT_ROW_HEIGHT;
 
                         let w = 0;
                         let h = 0;
@@ -259,15 +313,15 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ file, resume, width, height
                         let maxR_for_buffer = 0;
 
                         // Worker側で付与された printAreaBounds を使用
-                        const r = safeSheet.printAreaBounds;
+                        const r = sheet.printAreaBounds;
 
                         // A. 印刷範囲(PrintArea)がある場合
                         if (r) {
                             // 印刷領域の左端に罫線があるかどうかの判別
-                            const borderInfo = (sheet.config?.borderInfo || []) as any[];
+                            const borderInfo = (sheet.config?.borderInfo || []) as BorderInfoEntry[];
 
                             // 印刷範囲の左端の列 (r.c1) に左罫線があるかを判定
-                            const hasLeftBorderAtStart = borderInfo.some(info => {
+                            const hasLeftBorderAtStart = borderInfo.some((info: BorderInfoEntry) => {
                                 const col = info.value?.col_index ?? info.col_index ?? info.range?.[0]?.column?.[0];
 
                                 // 印刷範囲の左端 (r.c1) と一致するか判定
@@ -300,8 +354,8 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ file, resume, width, height
                             let hasData = false;
 
                             // celldata走査
-                            if (safeSheet.celldata && Array.isArray(safeSheet.celldata)) {
-                                safeSheet.celldata.forEach((cell: any) => {
+                            if (sheet.celldata && Array.isArray(sheet.celldata)) {
+                                (sheet.celldata as IfortuneSheetCelldata[]).forEach((cell: IfortuneSheetCelldata) => {
                                     if (cell && typeof cell.r === 'number' && typeof cell.c === 'number') {
                                         maxR = Math.max(maxR, cell.r);
                                         maxC = Math.max(maxC, cell.c);
@@ -311,10 +365,10 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ file, resume, width, height
                             }
 
                             // data走査
-                            if (safeSheet.data && Array.isArray(safeSheet.data)) {
-                                safeSheet.data.forEach((row: any, r: number) => {
+                            if (sheet.data && Array.isArray(sheet.data)) {
+                                sheet.data.forEach((row: (Record<string, unknown> | null)[] | null, r: number) => {
                                     if (!row || !Array.isArray(row)) return;
-                                    row.forEach((cell: any, c: number) => {
+                                    row.forEach((cell: Record<string, unknown> | null, c: number) => {
                                         if (cell !== null) {
                                             maxR = Math.max(maxR, r);
                                             maxC = Math.max(maxC, c);
@@ -327,9 +381,9 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ file, resume, width, height
                             // borderInfo走査 (罫線のみの範囲)
                             const borderInfo = sheet.config?.borderInfo;
                             if (borderInfo && Array.isArray(borderInfo)) {
-                                borderInfo.forEach((border: any) => {
+                                (borderInfo as BorderInfoEntry[]).forEach((border: BorderInfoEntry) => {
                                     if (border.rangeType === 'range' && border.range) {
-                                        border.range.forEach((range: any) => {
+                                        border.range.forEach((range: IfortuneSheetSelection) => {
                                             if (range.row) { maxR = Math.max(maxR, range.row[1]); hasData = true; }
                                             if (range.column) { maxC = Math.max(maxC, range.column[1]); hasData = true; }
                                         });
@@ -373,7 +427,7 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ file, resume, width, height
                         });
                     }
                 }
-            } catch (e: any) {
+            } catch (e: unknown) {
                 // キャンセルされた場合はエラーを無視
                 if (isMounted) {
                     const errorMessage = e instanceof Error ? e.message : String(e);
@@ -394,9 +448,10 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ file, resume, width, height
 
         return () => {
             isMounted = false;
-            if (typeof window !== 'undefined' && (window as any).luckysheet) {
+            const win = window as unknown as LuckySheetGlobal;
+            if (typeof window !== 'undefined' && win.luckysheet) {
                 try {
-                    (window as any).luckysheet.destroy();
+                    win.luckysheet.destroy();
                 } catch {
                     // エラーは無視
                 }
@@ -406,11 +461,8 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ file, resume, width, height
 
     return (
         <div
+            ref={containerRef}
             className={styles.excelPreviewContainer}
-            style={{
-                width: width ? `${width}px` : '100%',
-                height: height ? `${height}px` : '100%'
-            }}
         >
             <Workbook
                 key={previewKey}
