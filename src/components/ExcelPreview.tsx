@@ -11,17 +11,17 @@ import type { IfortuneSheet, IfortuneImageDefault, IfortuneSheetConfig } from '@
 import '@fortune-sheet/react/dist/index.css';
 import styles from './ExcelPreview.module.scss';
 import type { ResumeConfig } from '../types/resume';
-import PizZip from 'pizzip';
-import { getMaximumPrintAreaFromList } from '../utils/excel';
 import { useExcelWorker } from '../hooks/useExcelWorker';
 import { useNotification } from './NotificationContext';
+import { DEFAULT_ROW_HEIGHT, DEFAULT_COL_WIDTH, EXCEL_MAX_ROW, EXCEL_MAX_COL } from '../utils/excel';
 
 interface ExcelPreviewProps {
-    templateBuffer: ArrayBuffer;
+    file: File;
     resume: ResumeConfig;
     width?: number;
     height?: number;
     onSizeChange?: (size: { fitWidth: number; fitHeight: number; totalWidth: number; totalHeight: number }) => void;
+    setIsLoading?: (loading: boolean) => void;
 }
 
 /** FortuneSheetのソース画像データ定義（入力時） */
@@ -40,53 +40,64 @@ interface SourceImage extends Partial<Image> {
     };
 }
 
-const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, width, height, onSizeChange }) => {
+const FALLBACK_DUMMY_SHEET = {
+    name: "Sheet1",
+    id: "1",
+    status: 1,
+    order: 0,
+    data: [[{ v: "", m: "" }]],
+    celldata: [{ r: 0, c: 0, v: { v: "", m: "" } }]
+} as unknown as Sheet;
+
+const ExcelPreview: React.FC<ExcelPreviewProps> = ({ file, resume, width, height, onSizeChange, setIsLoading }) => {
 
     // 通知フック
     const { notify } = useNotification();
 
-    const [sheetData, setSheetData] = useState<Sheet[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [sheetData, setSheetData] = useState<Sheet[]>([FALLBACK_DUMMY_SHEET]);
     // プレビューの強制再描画用キー
     const [previewKey, setPreviewKey] = useState(0);
 
     // Web Worker カスタムフック
-    const { generatePreview } = useExcelWorker();
+    const { generatePreview, isLoading } = useExcelWorker();
+
+    // 親のローディング状態と同期
+    useEffect(() => {
+        if (setIsLoading) {
+            setIsLoading(isLoading);
+        }
+    }, [isLoading, setIsLoading]);
 
     // サイズ変更時に Luckysheet にリサイズを促す（再描画）
     useEffect(() => {
+        let timer: NodeJS.Timeout;
         if (width || height) {
-            setPreviewKey(prev => prev + 1);
+            timer = setTimeout(() => {
+                setPreviewKey(prev => prev + 1);
+            }, 0);
         }
+        return () => clearTimeout(timer);
     }, [width, height]);
 
     useEffect(() => {
         let isMounted = true;
 
         const loadAndTransform = async () => {
-            setLoading(true);
             try {
                 // Worker経由でExcel生成 → FortuneSheet変換を実行
-                const result = await generatePreview(resume, templateBuffer);
+                const result = await generatePreview(resume, file);
 
                 if (!result.sheets || result.sheets.length === 0) {
-                    if (isMounted) setSheetData([]);
+                    if (isMounted) {
+                        setSheetData([FALLBACK_DUMMY_SHEET]);
+                        setPreviewKey(Date.now());
+                    }
                     return;
                 }
 
                 if (isMounted) {
 
-                    // 印刷範囲を取得する処理の前処理
-                    const zip = new PizZip(templateBuffer);
-                    const workbookXmlStr = zip.file("xl/workbook.xml")?.asText();
-                    if (!workbookXmlStr) throw new Error("Workbook.xml が見つかりません");
-
-                    const xmlDoc = new DOMParser().parseFromString(workbookXmlStr, "application/xml");
-                    const definedNames = xmlDoc.getElementsByTagName("definedName");
-                    // 印刷範囲を取得する処理の前処理 ここまで
-
-
-                    const processedSheets: Sheet[] = (result.sheets as unknown as IfortuneSheet[]).map((sheet, index) => {
+                    const processedSheets: Sheet[] = (result.sheets as unknown as IfortuneSheet[]).map((sheet) => {
 
                         // 画像の再配置処理（Excelの読み込み側と表示側でフォーマットが違うので書き換えている）
                         let finalizedImages: Image[] = [];
@@ -96,9 +107,6 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, wid
                             // 数値でアクセスするとエラーになる可能性があるため、Record<string | number, number> として扱うかキャストする
                             const rowlen = (config.rowlen || {}) as Record<string | number, number>;
                             const columnlen = (config.columnlen || {}) as Record<string | number, number>;
-
-                            const DEFAULT_ROW_HEIGHT = 19;
-                            const DEFAULT_COL_WIDTH = 73;
 
                             const calculateMetrics = (img: SourceImage) => {
                                 let top = 0;
@@ -195,54 +203,6 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, wid
                         }
                         // 画像の再配置処理ここまで
 
-                        // 印刷範囲を取得し、非表示に設定する処理
-                        const rowhidden: Record<string, number> = {};
-                        const colhidden: Record<string, number> = {};
-                        // 0. 印刷範囲を取得
-                        let rawRanges = "";
-                        for (let i = 0; i < definedNames.length; i++) {
-                            const node = definedNames[i];
-                            // localSheetId属性を確認し、対象シートの印刷範囲を特定（マルチシート対応）
-                            if (node.getAttribute("name") === "_xlnm.Print_Area" &&
-                                node.getAttribute("localSheetId") === String(index)) {
-                                rawRanges = node.textContent || "";
-                                break;
-                            }
-                        }
-
-                        if (rawRanges) {
-                            // 1. カンマで分割して個別の範囲を取得
-                            // 例: ["Sheet1!$A$1:$B$10", "Sheet1!$D$1:$E$10"]
-                            const areas = rawRanges.split(',');
-
-                            // 2. 各範囲からシート名を取り除き、純粋なアドレス形式に変換
-                            // 例: ["A1:B10", "D4:E5"]
-                            const cleanedAreas = areas.map(area => {
-                                const parts = area.split('!');
-                                return (parts.length > 1 ? parts[1] : parts[0]).replace(/\$/g, "");
-                            });
-
-                            const range = getMaximumPrintAreaFromList(cleanedAreas);
-                            if (range) {
-
-                                // 4. 印刷範囲外の行を非表示にセット
-                                // 0行目から最大行（例: 1000）まで回して、範囲外を登録
-                                for (let r = 0; r < 1000; r++) {
-                                    if (r < range.r1 || r > range.r2) {
-                                        // Luckysheetの仕様：キーを行番号、値を 0 にすると非表示
-                                        rowhidden[`${r}`] = 0;
-                                    }
-                                }
-
-                                // 5. 印刷範囲外の列を非表示にセット
-                                for (let c = 0; c < 1000; c++) {
-                                    if (c < range.c1 || c > range.c2) {
-                                        colhidden[`${c}`] = 0;
-                                    }
-                                }
-                            }
-                        }
-
                         return {
                             ...sheet,
                             status: 1,
@@ -250,9 +210,6 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, wid
                             showGridLines: 0,
                             config: {
                                 ...sheet.config,
-                                // 非表示エリアの設定
-                                rowhidden,
-                                colhidden,
                                 // アップデートの日付を更新
                                 _update: Date.now()
                             }
@@ -291,18 +248,8 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, wid
 
                         // ここで正しいデフォルト幅を取得しておく
                         const safeSheet = sheet as any;
-                        const defaultColWidth = safeSheet.defaultColWidth ?? 73;
-                        const defaultRowHeight = safeSheet.defaultRowHeight ?? 19;
-
-                        // 印刷範囲の再取得
-                        let rawRanges = "";
-                        for (let i = 0; i < definedNames.length; i++) {
-                            if (definedNames[i].getAttribute("name") === "_xlnm.Print_Area" &&
-                                definedNames[i].getAttribute("localSheetId") === "0") {
-                                rawRanges = definedNames[i].textContent || "";
-                                break;
-                            }
-                        }
+                        const defaultColWidth = safeSheet.defaultColWidth ?? DEFAULT_COL_WIDTH;
+                        const defaultRowHeight = safeSheet.defaultRowHeight ?? DEFAULT_ROW_HEIGHT;
 
                         let w = 0;
                         let h = 0;
@@ -311,44 +258,38 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, wid
                         let maxC_for_buffer = 0;
                         let maxR_for_buffer = 0;
 
+                        // Worker側で付与された printAreaBounds を使用
+                        const r = safeSheet.printAreaBounds;
+
                         // A. 印刷範囲(PrintArea)がある場合
-                        if (rawRanges) {
-                            const cleaned = rawRanges.split('!').pop()?.replace(/\$/g, "") || "";
-                            const r = getMaximumPrintAreaFromList(cleaned);
+                        if (r) {
+                            // 印刷領域の左端に罫線があるかどうかの判別
+                            const borderInfo = (sheet.config?.borderInfo || []) as any[];
 
-                            if (r) {
-                                // 印刷領域の左端に罫線があるかどうかの判別
-                                const borderInfo = (sheet.config?.borderInfo || []) as any[];
+                            // 印刷範囲の左端の列 (r.c1) に左罫線があるかを判定
+                            const hasLeftBorderAtStart = borderInfo.some(info => {
+                                const col = info.value?.col_index ?? info.col_index ?? info.range?.[0]?.column?.[0];
 
-                                // 印刷範囲の左端の列 (r.c1) に左罫線があるかを判定
-                                const hasLeftBorderAtStart = borderInfo.some(info => {
-                                    const col = info.value?.col_index ?? info.col_index ?? info.range?.[0]?.column?.[0];
+                                // 印刷範囲の左端 (r.c1) と一致するか判定
+                                if (col === undefined || col !== r.c1) return false;
 
-                                    // 印刷範囲の左端 (r.c1) と一致するか判定
-                                    if (col === undefined || col !== r.c1) return false;
+                                // 左罫線 ('l') の存在確認
+                                return !!info.value?.l;
+                            });
 
-                                    // 左罫線 ('l') の存在確認
-                                    // ログで確認された通り、info.value.l の有無をチェックします
-                                    return !!info.value?.l;
-                                });
+                            if (hasLeftBorderAtStart) {
+                                notify("excel-border-warning", "warning", "左端の罫線は表示されていない可能性がありますが、Excel形式で保存した場合は、正常に出力されます。");
+                            }
 
-                                if (hasLeftBorderAtStart) {
-                                    notify("excel-border-warning", "warning", "左端の罫線は表示されていない可能性がありますが、Excel形式で保存した場合は、正常に出力されます。");
-                                }
-                                // 印刷領域の左端に罫線があるかどうかの判別 ここまで
+                            // 最大列数を記録（バッファ計算用）
+                            maxC_for_buffer = r.c2;
+                            maxR_for_buffer = r.r2;
 
-                                // 最大列数を記録（バッファ計算用）
-                                maxC_for_buffer = r.c2;
-                                maxR_for_buffer = r.r2;
-                                // 固定値(73)ではなく、取得した defaultColWidth を使う
-                                for (let i = r.c1; i <= r.c2; i++) {
-                                    // 文字列キーと数値キーの両方をケア
-                                    w += columnlen[String(i)] ?? columnlen[i] ?? defaultColWidth;
-                                }
-                                // 固定値(19)ではなく、取得した defaultRowHeight を使う
-                                for (let i = r.r1; i <= r.r2; i++) {
-                                    h += rowlen[String(i)] ?? rowlen[i] ?? defaultRowHeight;
-                                }
+                            for (let i = r.c1; i <= r.c2; i++) {
+                                w += columnlen[String(i)] ?? columnlen[i] ?? defaultColWidth;
+                            }
+                            for (let i = r.r1; i <= r.r2; i++) {
+                                h += rowlen[String(i)] ?? rowlen[i] ?? defaultRowHeight;
                             }
                         }
 
@@ -400,7 +341,8 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, wid
                             }
 
                             if (!hasData) {
-                                maxR = 50; maxC = 20;
+                                maxC = EXCEL_MAX_COL;
+                                maxR = EXCEL_MAX_ROW;
                             } else {
                                 maxR += 5; maxC += 5;
                             }
@@ -418,8 +360,9 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, wid
                             }
                         }
 
-                        const widthBuffer = 30 + (maxC_for_buffer * 4);
-                        const heightBuffer = 30 + (maxR_for_buffer * 4);
+                        // CSS の padding (32px * 2 = 64px) を考慮し、少し余裕を持たせたバッファを設定
+                        const widthBuffer = 80 + (maxC_for_buffer * 2);
+                        const heightBuffer = 80 + (maxR_for_buffer * 2);
 
                         // 最後に安全マージン
                         onSizeChange({
@@ -438,35 +381,37 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ templateBuffer, resume, wid
                     if (!errorMessage.includes("キャンセル")) {
                         notify("excel-load-error", "error", errorMessage);
                         // マーカーが存在しないなどのエラー時は空のシートを表示する
-                        setSheetData([{
-                            name: "Sheet1",
-                            id: "1",
-                            status: 1,
-                            order: 0,
-                            data: [[null]],
-                            celldata: [],
-                        } as unknown as Sheet]);
+                        setSheetData([FALLBACK_DUMMY_SHEET]);
                         setPreviewKey(Date.now());
                     }
-                }
-            } finally {
-                if (isMounted) {
-                    setLoading(false);
                 }
             }
         };
 
-        if (templateBuffer) {
+        if (file) {
             loadAndTransform();
         }
 
-        return () => { isMounted = false; };
-    }, [templateBuffer, resume, onSizeChange, notify, generatePreview]);
-
-    if (loading) return <div className={styles.renderingContainer}><div className={styles.rendering} /></div>;
+        return () => {
+            isMounted = false;
+            if (typeof window !== 'undefined' && (window as any).luckysheet) {
+                try {
+                    (window as any).luckysheet.destroy();
+                } catch {
+                    // エラーは無視
+                }
+            }
+        };
+    }, [file, resume, onSizeChange, notify, generatePreview]);
 
     return (
-        <div className={styles.excelPreviewContainer}>
+        <div
+            className={styles.excelPreviewContainer}
+            style={{
+                width: width ? `${width}px` : '100%',
+                height: height ? `${height}px` : '100%'
+            }}
+        >
             <Workbook
                 key={previewKey}
                 data={sheetData}

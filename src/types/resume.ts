@@ -58,10 +58,6 @@ export interface ResumeConfig {
 export interface TemplateEntry {
     /** 一意のID (UUID v4等) */
     id: string;
-    /** アップロードされたファイルオブジェクト */
-    file: File;
-    /** ファイルのArrayBuffer (キャッシュ用。File参照切れ対策) */
-    arrayBuffer: ArrayBuffer;
     /** ファイル名 */
     name: string;
     /** テンプレートのフォーマット ('word' | 'excel') */

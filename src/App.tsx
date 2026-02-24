@@ -21,14 +21,24 @@ import { dump } from 'js-yaml';
 import PizZip from 'pizzip';
 import { saveAs } from 'file-saver';
 import { NotificationProvider } from './components/Notification';
+import { useNotification } from './components/NotificationContext';
+import { clearTemplateFileStore, templateFileStore } from './store/fileStore';
+import { checkIsMobile, checkNeedsLimit } from './utils/device';
+import { SESSION_KEYS } from './utils/sessionKeys';
 
+const MAX_TEMPLATES = 5;
 /**
  * アプリケーションのルートコンポーネント
  * レイアウトの構築、モード切り替え、エクスポート機能の呼び出しを行う
  */
-function App() {
-
+function AppContent() {
   const { resume, templates, addTemplates, selectedTemplateId, setSelectedTemplateId, previewMode, setPreviewMode, exportOptions, importData, toggleTemplateCheck } = useResume();
+
+  // DBのクリア
+  useEffect(() => {
+    clearTemplateFileStore();
+  }, []);
+
   const [isExporting, setIsExporting] = useState(false);
   const [optionDialogOpen, setOptionDialogOpen] = useState(false);
   const [editorWidth, setEditorWidth] = useState(500);
@@ -37,24 +47,83 @@ function App() {
   const [templateMenuAnchorEl, setTemplateMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileView, setMobileView] = useState<'editor' | 'preview'>('editor');
-  // モバイル判定: 縦向き768px以下 or 横向き900px以下
-  const checkMobile = () => window.innerWidth <= 768 || (window.innerWidth <= 900 && window.matchMedia('(orientation: landscape)').matches);
-  const [isMobile, setIsMobile] = useState(checkMobile());// ★ 1. 文字サイズの状態をここで管理（初期値14px）
+  // モバイル判定
+  const [isMobile, setIsMobile] = useState(checkIsMobile());
   const [editorFontSize, setEditorFontSize] = useState(14);
 
   const isResizing = useRef(false);
   const templateInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
+  // 通知フック
+  const { notify } = useNotification();
+
+  // OOM（メモリ不足）による強制リロードの検知
+  useEffect(() => {
+    const heavyTaskFlag = sessionStorage.getItem(SESSION_KEYS.HEAVY_TASK);
+    const bgKillFlag = sessionStorage.getItem(SESSION_KEYS.BG_KILL);
+    const pickingFileFlag = sessionStorage.getItem(SESSION_KEYS.PICKING_FILE);
+    const intentionalReloadFlag = sessionStorage.getItem(SESSION_KEYS.INTENTIONAL_RELOAD);
+
+    // 意図的なリロード（F5など）の場合は、クラッシュ警告を出さない
+    if (!intentionalReloadFlag) {
+      if (heavyTaskFlag) {
+        notify("crash-detected", "error", "プレビュー処理中にメモリ限界に達したため、画面が再読み込みされました。");
+      } else if (pickingFileFlag) {
+        notify("crash-detected", "error", "ファイル読み込み時にメモリ限界に達したため、画面が再読み込みされました。大量のファイルを選択すると発生しやすくなります。");
+      } else if (bgKillFlag) {
+        notify("bg-kill-detected", "warning", "バックグラウンド待機中にOSによってメモリが解放されたため、画面が初期化されました。");
+      }
+    }
+
+    // 表示（判定）が終わったらフラグをすべて掃除する
+    sessionStorage.removeItem(SESSION_KEYS.HEAVY_TASK);
+    sessionStorage.removeItem(SESSION_KEYS.BG_KILL);
+    sessionStorage.removeItem(SESSION_KEYS.PICKING_FILE);
+    sessionStorage.removeItem(SESSION_KEYS.INTENTIONAL_RELOAD);
+
+    // --- バックグラウンド・リロード・遷移の検知 ---
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // ファイルピッカーを開く操作をしていなければ、純粋なバックグラウンド移行とみなす
+        if (!sessionStorage.getItem(SESSION_KEYS.PICKING_FILE)) {
+          sessionStorage.setItem(SESSION_KEYS.BG_KILL, 'true');
+        }
+      } else {
+        // キルされずに無事に戻ってきたらフラグを下ろす
+        sessionStorage.removeItem(SESSION_KEYS.BG_KILL);
+        // ファイルピッカーフラグも、戻ってきて少し経ったら消す（キャンセル時の対応）
+        // 500ms 程度が適切（OSのピッカーが戻る際のタイムラグを考慮）
+        setTimeout(() => {
+          sessionStorage.removeItem(SESSION_KEYS.PICKING_FILE);
+        }, 500);
+      }
+    };
+
+    const handleBeforeUnload = () => {
+      // ユーザー自らリロードや移動をしようとした場合にフラグを立てる
+      // ファイル選択中や重い処理中のクラッシュ死に際に呼ばれた場合は、意図的とはみなさない（隠蔽しない）
+      if (!sessionStorage.getItem(SESSION_KEYS.PICKING_FILE) && !sessionStorage.getItem(SESSION_KEYS.HEAVY_TASK)) {
+        sessionStorage.setItem(SESSION_KEYS.INTENTIONAL_RELOAD, 'true');
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [notify]);
+
   // ズーム防止
   useEffect(() => {
-    // --- ガード1: iOS Safariのピンチズーム防止 ---
     // SafariはCSSのtouch-actionを無視する場合があるため、JSで止める
     const handleGestureStart = (e: Event) => {
       e.preventDefault();
     };
 
-    // --- ガード2: PCの「Ctrl + ホイール」ズーム防止 ---
     // トラックパッドのピンチ操作も「Ctrl + ホイール」として判定されることが多い
     const handleWheel = (e: WheelEvent) => {
       if (e.ctrlKey) {
@@ -62,7 +131,7 @@ function App() {
       }
     };
 
-    // --- ガード3: ダブルタップズーム防止（念のため） ---
+    // ダブルタップズーム防止（念のため）
     let lastTouchEnd = 0;
     const handleTouchEnd = (e: TouchEvent) => {
       const now = new Date().getTime();
@@ -89,7 +158,7 @@ function App() {
   // ウィンドウサイズ監視
   useEffect(() => {
     const handleResize = () => {
-      const mobile = checkMobile();
+      const mobile = checkIsMobile();
       setIsMobile(mobile);
       if (!mobile && !showSource) setShowSource(true);
     };
@@ -126,31 +195,53 @@ function App() {
     try {
       const targets = templates.filter(t => t.checked);
       if (targets.length === 0) {
-        alert('出力対象のテンプレートが選択されていません。');
+        notify("no-template-selected", "error", "出力対象のテンプレートが選択されていません。");
         return;
       }
 
+      const generateTemplateBlob = async (t: typeof templates[0]) => {
+        const fileData = await templateFileStore.get(t.id);
+        if (!fileData) {
+          notify("template-not-found", "error", `テンプレート ${t.name} が見つかりませんでした。`);
+          return null;
+        }
+
+        let buffer: ArrayBuffer;
+        if (fileData.data instanceof ArrayBuffer) {
+          buffer = fileData.data;
+        } else {
+          buffer = await (fileData.data as File | Blob).arrayBuffer();
+        }
+
+        return t.format === 'excel'
+          ? await generateExcelBlob(resume, buffer, exportOptions)
+          : await generateWordBlob(resume, buffer, exportOptions);
+      };
+
       if (targets.length === 1) {
+        // 1件のみエクスポートの場合
+
         const t = targets[0];
-        const blob = t.format === 'word'
-          ? await generateWordBlob(resume, t.arrayBuffer, exportOptions)
-          : await generateExcelBlob(resume, t.arrayBuffer, exportOptions);
-        saveAs(blob, `resume_${t.name}`);
+        const blob = await generateTemplateBlob(t);
+        if (blob) saveAs(blob, `resume_${t.name}`);
+
       } else {
+        // 複数件をZIPでエクスポートの場合
+
         const zip = new PizZip();
         for (const t of targets) {
-          const blob = t.format === 'word'
-            ? await generateWordBlob(resume, t.arrayBuffer, exportOptions)
-            : await generateExcelBlob(resume, t.arrayBuffer, exportOptions);
-          const buffer = await blob.arrayBuffer();
-          zip.file(t.name, buffer);
+          const blob = await generateTemplateBlob(t);
+          if (blob) {
+            const bufferToUse = await blob.arrayBuffer();
+            zip.file(t.name, bufferToUse);
+          }
         }
         const content = zip.generate({ type: 'blob', compression: 'DEFLATE' });
         saveAs(content, 'resumes.zip');
       }
     } catch (e) {
       console.error(e);
-      alert('エクスポートに失敗しました。');
+      notify("export-error", "error", "エクスポートに失敗しました。");
     } finally {
       setIsExporting(false);
     }
@@ -283,48 +374,52 @@ function App() {
         </AppBar>
 
         <Box className={styles.mainContent}>
-          <Box
-            className={clsx(styles.editorPane, "print-hidden")}
-            style={{
-              display: (isMobile && mobileView !== 'editor') || !showSource ? 'none' : 'block',
-              width: isMobile ? '100%' : editorWidth
-            }}
-          >
-            <ResumeEditor fontSize={editorFontSize} setFontSize={setEditorFontSize} />
-          </Box>
+          {(!isMobile || mobileView === 'editor') && showSource && (
+            <Box
+              className={clsx(styles.editorPane, "print-hidden")}
+              style={{
+                display: 'block',
+                width: isMobile ? '100%' : editorWidth
+              }}
+            >
+              <ResumeEditor fontSize={editorFontSize} setFontSize={setEditorFontSize} />
+            </Box>
+          )}
 
           {!isMobile && (
             <Box className={clsx(styles.resizeHandle, "print-hidden", isResizing.current ? styles.dragging : styles.default)} onMouseDown={startResizing} />
           )}
 
-          <Box
-            className={styles.previewPane}
-            style={{
-              display: (isMobile && mobileView !== 'preview') ? 'none' : 'flex'
-            }}
-          >
-            {previewMode === 'template' && visibleTemplates.length > 1 && (
-              <>
-                <div className={styles.templateNavPrevContainer}>
-                  <IconButton className={clsx(styles.templateNavBtn, styles.templateNavPrev, "print-hidden")} onClick={() => {
-                    const i = visibleTemplates.findIndex(t => t.id === selectedTemplateId);
-                    const prevIndex = i === -1 ? 0 : (i - 1 + visibleTemplates.length) % visibleTemplates.length;
-                    setSelectedTemplateId(visibleTemplates[prevIndex].id);
-                  }}><ChevronLeft /></IconButton>
-                </div>
-                <div className={styles.templateNavNextContainer}>
-                  <IconButton className={clsx(styles.templateNavBtn, styles.templateNavNext, "print-hidden")} onClick={() => {
-                    const i = visibleTemplates.findIndex(t => t.id === selectedTemplateId);
-                    const nextIndex = i === -1 ? 0 : (i + 1) % visibleTemplates.length;
-                    setSelectedTemplateId(visibleTemplates[nextIndex].id);
-                  }}><ChevronRight /></IconButton>
-                </div>
-              </>
-            )}
-            <Box className={clsx(styles.previewScrollArea, previewMode === 'template' && styles.templateScroll)}>
-              <Preview />
+          {(!isMobile || mobileView === 'preview') && (
+            <Box
+              className={styles.previewPane}
+              style={{
+                display: 'flex'
+              }}
+            >
+              {previewMode === 'template' && visibleTemplates.length > 1 && (
+                <>
+                  <div className={styles.templateNavPrevContainer}>
+                    <IconButton className={clsx(styles.templateNavBtn, styles.templateNavPrev, "print-hidden")} onClick={() => {
+                      const i = visibleTemplates.findIndex(t => t.id === selectedTemplateId);
+                      const prevIndex = i === -1 ? 0 : (i - 1 + visibleTemplates.length) % visibleTemplates.length;
+                      setSelectedTemplateId(visibleTemplates[prevIndex].id);
+                    }}><ChevronLeft /></IconButton>
+                  </div>
+                  <div className={styles.templateNavNextContainer}>
+                    <IconButton className={clsx(styles.templateNavBtn, styles.templateNavNext, "print-hidden")} onClick={() => {
+                      const i = visibleTemplates.findIndex(t => t.id === selectedTemplateId);
+                      const nextIndex = i === -1 ? 0 : (i + 1) % visibleTemplates.length;
+                      setSelectedTemplateId(visibleTemplates[nextIndex].id);
+                    }}><ChevronRight /></IconButton>
+                  </div>
+                </>
+              )}
+              <Box className={clsx(styles.previewScrollArea, previewMode === 'template' && styles.templateScroll)}>
+                <Preview />
+              </Box>
             </Box>
-          </Box>
+          )}
         </Box>
 
         {/* PC版フッター */}
@@ -382,15 +477,56 @@ function App() {
         )}
 
         <ExportOptionDialog open={optionDialogOpen} onClose={() => setOptionDialogOpen(false)} />
-        <input type="file" title="テンプレートをロード" ref={templateInputRef} className={styles.hiddenInput} accept=".docx,.xlsx" multiple onChange={(e) => {
-          if (e.target.files && e.target.files.length > 0) {
-            addTemplates(Array.from(e.target.files));
-            setPreviewMode('template');
-            setMobileView('preview'); // 読み込み完了時にプレビュータブへ自動遷移
+        <input type="file" title="テンプレートをロード" ref={templateInputRef} className={styles.hiddenInput} accept=".docx,.xlsx" multiple onClick={(e) => {
+          (e.target as HTMLInputElement).value = '';
+          // ピッカーを開く直前にフラグを立てる
+          sessionStorage.setItem(SESSION_KEYS.PICKING_FILE, 'true');
+        }} onChange={async (e) => {
+          const targetInput = e.target as HTMLInputElement;
+          const files = targetInput.files;
+
+          if (!files || files.length === 0) {
+            sessionStorage.removeItem(SESSION_KEYS.PICKING_FILE);
+            return;
           }
-          e.target.value = '';
+
+          let filesArray = Array.from(files);
+
+          setSelectedTemplateId(null);
+          setPreviewMode('standard');
+
+          sessionStorage.setItem(SESSION_KEYS.HEAVY_TASK, 'true');
+          sessionStorage.removeItem(SESSION_KEYS.PICKING_FILE);
+
+          const needsLimit = checkNeedsLimit();
+
+          if (needsLimit && filesArray.length > MAX_TEMPLATES) {
+            notify("template-limit-reached", "warning", `先頭の${MAX_TEMPLATES}件のみ読み込みました。モバイル環境ではメモリの制約のため一度に読み込めるテンプレートが制限されます。`);
+            filesArray = filesArray.slice(0, MAX_TEMPLATES);
+          }
+
+          try {
+            // ここで addTemplates を呼ぶ
+            await addTemplates(filesArray);
+
+            setPreviewMode('template');
+            if (!needsLimit) {
+              setMobileView('preview');
+            } else {
+              setMobileView('editor');
+            }
+          } finally {
+            targetInput.value = '';
+          }
         }} />
-        <input type="file" title="データを読み込む" ref={importInputRef} className={styles.hiddenInput} accept=".json,.yaml,.yml" onChange={(e) => {
+        <input type="file" title="データを読み込む" ref={importInputRef} className={styles.hiddenInput} accept=".json,.yaml,.yml" onClick={(e) => {
+          (e.target as HTMLInputElement).value = '';
+          // ピッカーを開く直前にフラグを立てる
+          sessionStorage.setItem(SESSION_KEYS.PICKING_FILE, 'true');
+        }} onChange={(e) => {
+          // キャンセルまたは選択完了時に消す
+          sessionStorage.removeItem(SESSION_KEYS.PICKING_FILE);
+
           const file = e.target.files?.[0];
           if (file) {
             const reader = new FileReader();
@@ -400,11 +536,17 @@ function App() {
             };
             reader.readAsText(file);
           }
-          e.target.value = '';
         }} />
       </Box>
     </NotificationProvider>
   );
 }
 
+function App() {
+  return (
+    <NotificationProvider>
+      <AppContent />
+    </NotificationProvider>
+  );
+}
 export default App;

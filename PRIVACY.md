@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Effective Date:** February 13, 2026
+**Effective Date:** February 24, 2026
 
 ## 1. Client-Side Only (ブラウザ完結型)
 
@@ -17,16 +17,26 @@ We do not collect, store, or transmit any of your personal data to our servers o
 We do not use cookies or any third-party tracking tools (such as Google Analytics).
 Cookie や、Google Analytics 等のサードパーティ製トラッキングツールは一切使用しておりません。
 
-## 4. Data Persistence (データの保存について)
+## 4. Data Persistence & Security (データの保存とセキュリティについて)
 
-Your data exists only in your browser's memory while the tab is open. We do not use `localStorage` or `sessionStorage` to persist your data.
-Once you close the browser tab or refresh the page, your data is completely discarded unless you have explicitly exported it as a file.
-ユーザーのデータは、タブが開いている間のみブラウザのメモリ上に存在します。`localStorage` や `sessionStorage` への保存も行いません。
-ブラウザのタブを閉じるかページを更新すると、ユーザーが明示的にファイルとしてエクスポートしていない限り、データは完全に破棄されます。
+Your resume text data exists only in your browser's memory. We do not use `localStorage` or `sessionStorage` to persist your personal information.
+ユーザーが入力した履歴書のテキストデータは、ブラウザのメモリ上にのみ存在します。個人情報を `localStorage` や `sessionStorage` に保存することはありません。
+
+To prevent browser crashes due to memory limitations on mobile devices, uploaded **Template Files** are temporarily saved to the browser's internal storage (`IndexedDB`). However, we employ a strict **Volatile Encryption** mechanism to ensure zero-knowledge security:
+モバイル端末等のメモリ不足によるブラウザのクラッシュを防ぐため、アップロードされた **「テンプレートファイル」** に限り、ブラウザの内部ストレージ（`IndexedDB`）へ一時的に退避保存しています。しかし、完全なセキュリティを保証するため、以下の **揮発性暗号化** メカニズムを採用しています：
+
+- A one-time, throwaway encryption key (AES-GCM 256-bit) is generated in the RAM every time you open the app.
+  アプリを開くたびに、メモリ（RAM）上に今回限りの使い捨て暗号化キー（AES-GCM 256bit）が生成されます。
+- Template files are strongly encrypted with this key before being written to the storage.
+  テンプレートファイルは、ストレージに書き込まれる直前にこのキーで強力に暗号化されます。
+- **The moment you close the browser tab or refresh the page, the encryption key is permanently destroyed.**
+  **ブラウザのタブを閉じるかページを更新した瞬間、この暗号化キーは電子的に完全に消滅します。**
+- Any encrypted data remaining in the storage becomes mathematically impossible to decrypt, turning into useless random noise. It poses zero risk of data leakage, even on a shared device. The residual data is automatically cleaned up the next time the app is launched.
+  ストレージに残された暗号化データは数学的に復元不可能（ただの乱数のゴミ）となるため、共有端末であっても情報漏洩のリスクは一切ありません。残存データは次回のアプリ起動時に自動的にクリーンアップされます。
 
 ## 5. Contact (お問い合わせ)
 
 If you have any questions about this Privacy Policy, please contact us via the GitHub repository.
 本プライバシーポリシーに関するご質問は、GitHubリポジトリを通じてお問い合わせください。
 
-[https://github.com/AyeBee/Resumaker](https://github.com/AyeBee/Resumaker)
+[https://github.com/AyeCi/Resumaker](https://github.com/AyeCi/Resumaker)

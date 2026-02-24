@@ -11,15 +11,15 @@ import { generateWordBlob } from '../utils/exporter';
 import styles from './WordPreview.module.scss';
 
 interface WordPreviewProps {
-    templateBuffer: ArrayBuffer;
+    file: File;
     resume: ResumeConfig;
     options: ExportOptions;
     onSizeChange?: (size: { fitWidth: number; fitHeight: number; totalWidth: number; totalHeight: number }) => void;
+    setIsLoading?: (loading: boolean) => void;
 }
 
-export function WordPreview({ templateBuffer, resume, options, onSizeChange }: WordPreviewProps) {
+export function WordPreview({ file, resume, options, onSizeChange, setIsLoading }: WordPreviewProps) {
     const containerRef = useRef<HTMLDivElement>(null);
-    const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     // 無限ループ防止用のサイズ記録Refを追加
@@ -29,17 +29,13 @@ export function WordPreview({ templateBuffer, resume, options, onSizeChange }: W
         const container = containerRef.current;
         if (!container || !onSizeChange) return;
 
-        // 2. ResizeObserver でコンテナの実際のDOMサイズを監視する
+        // ResizeObserver でコンテナの実際のDOMサイズを監視する
         const observer = new ResizeObserver(() => {
-            // scrollWidth / scrollHeight を使うことで、
-            // 「A3見開き」や「はみ出た複数ページ」の総延長を正確に取得できます
             const actualWidth = container.scrollWidth;
             const actualHeight = container.scrollHeight;
 
-            // 高さが0など、まだ描画されていない状態のときは無視する
             if (actualWidth === 0 || actualHeight === 0) return;
 
-            // 前回のサイズと同じな場合は通知をスキップ（無限ループの防波堤）
             if (lastSize.current.width === actualWidth && lastSize.current.height === actualHeight) {
                 return;
             }
@@ -53,7 +49,6 @@ export function WordPreview({ templateBuffer, resume, options, onSizeChange }: W
             });
         });
 
-        // 監視スタート
         observer.observe(container);
 
         return () => {
@@ -62,21 +57,26 @@ export function WordPreview({ templateBuffer, resume, options, onSizeChange }: W
     }, [onSizeChange]);
 
     useEffect(() => {
-        const renderDoc = async () => {
-            if (!containerRef.current || !templateBuffer) return;
+        let isCancelled = false;
 
-            setLoading(true);
+        const renderDoc = async () => {
+            if (!containerRef.current || !file) return;
+
             setError(null);
+            if (setIsLoading) setIsLoading(true);
             try {
-                // 1. 既存のユーティリティを使用して記入済みのWordドキュメントBlobを生成
-                // 注意: generateWordBlob は Blob を返す
-                const blob = await generateWordBlob(resume, templateBuffer, options);
+                // 1. 記入済みのWordドキュメントBlobを生成
+                const arrayBuffer = await file.arrayBuffer();
+                if (isCancelled) return;
+
+                const blob = await generateWordBlob(resume, arrayBuffer, options);
+                if (isCancelled) return;
 
                 // 2. docx-preview を使用してレンダリング
                 if (containerRef.current) {
                     containerRef.current.innerHTML = ''; // 以前のコンテンツをクリア
                     await renderAsync(blob, containerRef.current, undefined, {
-                        className: "docx-preview-content", // スタイリング用のオプションクラス
+                        className: "docx-preview-content",
                         inWrapper: false,
                         ignoreWidth: false,
                         ignoreHeight: false,
@@ -91,19 +91,25 @@ export function WordPreview({ templateBuffer, resume, options, onSizeChange }: W
                     });
                 }
             } catch (e) {
+                if (isCancelled) return;
                 console.error("Failed to render word preview:", e);
                 setError("Wordプレビューの生成に失敗しました。");
             } finally {
-                setLoading(false);
+                if (!isCancelled && setIsLoading) {
+                    setIsLoading(false);
+                }
             }
         };
 
         renderDoc();
-    }, [templateBuffer, resume, options]);
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [file, resume, options, setIsLoading]);
 
     return (
         <div className={styles.wordPreviewContainer}>
-            {loading && <div className={styles.loading}>レンダリング中...</div>}
             {error && <div className={styles.error}>{error}</div>}
             <div
                 ref={containerRef}
@@ -111,6 +117,4 @@ export function WordPreview({ templateBuffer, resume, options, onSizeChange }: W
             />
         </div>
     );
-};
-
-export default WordPreview;
+}

@@ -4,43 +4,49 @@
  * Released under the MIT License.
  */
 
-import { useState, useCallback, type ReactNode, useRef } from 'react';
+import { useState, useCallback, type ReactNode, useRef, useMemo, useEffect } from 'react';
 import yaml from 'js-yaml';
 import { DEFAULT_RESUME, type ResumeConfig, DEFAULT_EXPORT_OPTIONS, type ExportOptions, type TemplateEntry } from '../types/resume';
 import { ResumeContext, type EditorMode } from './ResumeHooks';
 import { normalizeResumeData } from '../utils/importer';
 import sampleYaml from '../../example/sample.yaml?raw'; // サンプルデータを読み込む
 import { generateUUID } from '../utils/uuid';
+import { templateFileStore } from '../store/fileStore';
+import { checkNeedsLimit } from '../utils/device';
+
+type RecursivePartial<T> = {
+    [P in keyof T]?: T[P] extends (infer U)[]
+    ? RecursivePartial<U>[]
+    : T[P] extends object
+    ? RecursivePartial<T[P]>
+    : T[P];
+};
 
 /**
  * オブジェクトから空の値（null, undefined, 空文字）を再帰的に削除する
- * 配列内の空要素も削除される
  * @param obj 対象オブジェクト
  * @returns クリーンアップされたオブジェクト
  */
-const removeEmptyProperties = (obj: any): any => {
+function removeEmptyProperties<T>(obj: T): T {
     if (Array.isArray(obj)) {
-        return obj.map(v => removeEmptyProperties(v)).filter(v => v !== null && v !== undefined && v !== '');
+        return obj
+            .map(v => removeEmptyProperties(v))
+            .filter(v => v !== null && v !== undefined && v !== '') as unknown as T;
     }
     if (typeof obj === 'object' && obj !== null) {
-        const newObj: any = {};
-        Object.keys(obj).forEach(key => {
-            const val = removeEmptyProperties(obj[key]);
-            if (val !== null && val !== undefined && val !== '') {
-                //MEMO: 再帰的に空のオブジェクトになった場合も削除したい場合はここを調整
-                //MEMO: 現在は { nested: {} } のように空オブジェクトは残る仕様
-                //MEMO: もし { year: "" } -> {} となり、それを親から消したいなら:
-                if (typeof val === 'object' && !Array.isArray(val) && Object.keys(val).length === 0) {
-                    //MEMO: 厳密なクリーンアップが必要な場合は空のオブジェクトを無視する
-                    //MEMO: ただし、空のオブジェクトが有効な場合もある（厳密な構造など）。履歴書の場合、通常は維持しても削除しても問題なし。
+        const newObj = {} as T;
+        for (const key in obj) {
+            if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                const val = removeEmptyProperties(obj[key]);
+                if (val !== null && val !== undefined && (val as unknown) !== '') {
+                    newObj[key] = val;
                 }
-                newObj[key] = val;
             }
-        });
+        }
         return newObj;
     }
     return obj;
-};
+}
 
 /**
  * エディタ表示用に履歴書データを整形する
@@ -48,20 +54,22 @@ const removeEmptyProperties = (obj: any): any => {
  * @param resume 履歴書データ
  * @returns エディタ用オブジェクト
  */
-const prepareResumeForEditor = (resume: ResumeConfig): Record<string, unknown> => {
+const prepareResumeForEditor = (resume: ResumeConfig): RecursivePartial<ResumeConfig> => {
     const { portrait: _, ...rest } = resume;
-    // リスト項目のID削除などの処理は removeEmptyProperties に任せることもできるが、
-    // 明示的なID削除は維持しつつ、空プロパティ削除を適用する
+    const cleaned = { ...rest } as RecursivePartial<ResumeConfig>;
+
     const listKeys: (keyof ResumeConfig)[] = ['education', 'work_experience', 'certificates'];
-    const cleaned = { ...rest } as Record<string, any>;
 
     listKeys.forEach(key => {
         const val = cleaned[key];
         if (Array.isArray(val)) {
-            cleaned[key] = val.map((item: any) => {
-                const { id: __, ...itemRest } = item;
-                return itemRest;
-            });
+            cleaned[key] = val.map(item => {
+                if (item && typeof item === 'object') {
+                    const { id: __, ...itemRest } = item as Record<string, unknown>;
+                    return itemRest;
+                }
+                return item;
+            }) as any; // HistoryItemのID削除後の一時的な型不整合を許容
         }
     });
 
@@ -108,11 +116,39 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
     const [rawText, setRawText] = useState<string>(sampleYaml);
     const [parseError, setParseError] = useState<{ message: string; line?: number } | null>(null);
     const [sourceFormat, setSourceFormat] = useState<'word' | 'excel' | 'pdf' | 'other' | null>(null);
-    const [templateFiles, setTemplateFiles] = useState<TemplateEntry[]>([]);
+    const [templates, setTemplates] = useState<TemplateEntry[]>([]);
     const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
     const [exportOptions, setExportOptions] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
     const [previewMode, setPreviewMode] = useState<'standard' | 'template'>('standard');
     const [portraitFile, setPortraitFileState] = useState<File | null>(null);
+
+    useEffect(() => {
+        const loadPersistedTemplates = async () => {
+            try {
+                // ストレージからメタデータを取得
+                const metadataList = await templateFileStore.getMetadataList();
+                if (metadataList.length > 0) {
+                    const restoredTemplates: TemplateEntry[] = metadataList.map(m => ({
+                        id: m.id,
+                        name: m.name,
+                        format: m.name.endsWith('.docx') ? 'word' : 'excel' as const,
+                        checked: true
+                        // data はここには持たないことでメモリを節約
+                    }));
+                    setTemplates(restoredTemplates);
+
+                    // 最初のテンプレートをデフォルト選択にする
+                    const first = restoredTemplates[0];
+                    setSelectedTemplateId(first.id);
+                    setSourceFormat(first.format);
+                }
+            } catch (error) {
+                console.error("Failed to load templates from IDB:", error);
+            }
+        };
+
+        loadPersistedTemplates();
+    }, []); // 初回マウント時のみ実行
 
     // プレビュー即時更新シグナル
     const [flushCount, setFlushCount] = useState(0);
@@ -122,7 +158,7 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
 
     const isImporting = useRef(false);
 
-    const handleSetRawText = (text: string) => {
+    const handleSetRawText = useCallback((text: string) => {
         if (isImporting.current) {
             return;
         }
@@ -134,14 +170,14 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
                 setResumeState({ ...normalized, portrait: resume.portrait } as ResumeConfig);
                 setParseError(null);
             }
-        } catch (e: any) {
-            // ... (エラー処理)
+        } catch (e: unknown) {
             let message = String(e);
             let line: number | undefined;
 
-            if (e.mark && typeof e.mark.line === 'number') {
-                line = e.mark.line + 1;
-                message = e.reason || e.message;
+            const err = e as { mark?: { line: number }; reason?: string; message?: string };
+            if (err.mark && typeof err.mark.line === 'number') {
+                line = err.mark.line + 1;
+                message = err.reason || err.message || message;
             } else if (e instanceof SyntaxError && e.message.includes('at position')) {
                 const match = e.message.match(/at position (\d+)/);
                 if (match) {
@@ -154,7 +190,7 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
 
             setParseError({ message, line });
         }
-    };
+    }, [mode, resume.portrait]);
 
     /**
      * 外部データ（文字列またはオブジェクト）を読み込み、履歴書Stateを更新する
@@ -162,7 +198,7 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
      * @param data インポートするデータ（JSON/YAML文字列、またはResumeConfigオブジェクト）
      * @param type データの形式 ('json', 'yaml', 'auto')
      */
-    const importData = (data: string | ResumeConfig, type: 'json' | 'yaml' | 'auto') => {
+    const importData = useCallback((data: string | ResumeConfig, type: 'json' | 'yaml' | 'auto') => {
         isImporting.current = true;
 
         // 処理の完了を待たずにフラグを戻すと競合のリスクがあるため、
@@ -178,54 +214,96 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
                 const parsed = newMode === 'json' ? JSON.parse(data) : yaml.load(data, { schema: yaml.JSON_SCHEMA });
                 if (parsed && typeof parsed === 'object') {
                     const normalized = normalizeResumeData(parsed as Partial<ResumeConfig>);
-                    const merged = { ...normalized, portrait: (normalized as any).portrait || resume.portrait } as ResumeConfig;
+                    const portrait = (parsed as { portrait?: string }).portrait || resume.portrait;
+                    const merged = { ...normalized, portrait } as ResumeConfig;
                     setResumeState(merged);
                     setParseError(null);
                 }
-            } catch (e: any) {
+            } catch (e: unknown) {
                 setParseError({ message: e instanceof Error ? e.message : String(e) });
             }
         } else {
             const normalized = normalizeResumeData(data);
-            const merged = { ...normalized, portrait: (normalized as any).portrait || resume.portrait } as ResumeConfig;
+            const portrait = (data as { portrait?: string }).portrait || resume.portrait;
+            const merged = { ...normalized, portrait } as ResumeConfig;
             setResumeState(merged);
             setRawText(serializeResume(merged, mode));
             setParseError(null);
         }
-    };
+    }, [mode, resume.portrait]);
 
-    const addTemplates = async (files: File[]) => {
+    const addTemplates = useCallback(async (files: File[]) => {
+        const needsLimit = checkNeedsLimit();
+        const MAX_TEMPLATES_OF_MOBILE = 5;
+
+        const currentFiles = [...templates];
+        const toRemoveIds: string[] = [];
         const newEntries: TemplateEntry[] = [];
-        let lastId = selectedTemplateId;
-        let lastFormat: any = sourceFormat;
+
         for (const file of files) {
-            let format: 'word' | 'excel' | 'other' = 'other';
-            if (file.name.endsWith('.docx')) format = 'word';
-            else if (file.name.endsWith('.xlsx')) format = 'excel';
-            if (format === 'other') continue;
-            const buffer = await file.arrayBuffer();
-            const entry: TemplateEntry = { id: generateUUID(), file, arrayBuffer: buffer, name: file.name, format: format as 'word' | 'excel', checked: true };
-            newEntries.push(entry);
-            lastId = entry.id;
-            lastFormat = format;
+            const dup = currentFiles.find(t => t.name === file.name);
+            if (dup) toRemoveIds.push(dup.id);
         }
-        if (newEntries.length > 0) {
-            setTemplateFiles(prev => {
-                const names = new Set(newEntries.map(e => e.name));
-                return [...prev.filter(t => !names.has(t.name)), ...newEntries];
-            });
-            setSelectedTemplateId(lastId);
-            setSourceFormat(lastFormat);
-        }
-    };
 
-    const removeTemplate = (id: string) => {
-        setTemplateFiles(prev => prev.filter(t => t.id !== id));
+        const targetCount = (currentFiles.length - toRemoveIds.length) + files.length;
+        if (needsLimit && targetCount > MAX_TEMPLATES_OF_MOBILE) {
+            const overCount = targetCount - MAX_TEMPLATES_OF_MOBILE;
+            const remaining = currentFiles.filter(f => !toRemoveIds.includes(f.id));
+            const extra = remaining.slice(0, overCount);
+            extra.forEach(e => toRemoveIds.push(e.id));
+        }
+
+        try {
+            // IndexedDBの操作
+            for (const id of toRemoveIds) {
+                await templateFileStore.delete(id);
+            }
+
+            let lastId: string | null = null;
+            let lastFormat: 'word' | 'excel' | null = null;
+
+            for (const file of files) {
+                let format: 'word' | 'excel' | 'other' = 'other';
+                if (file.name.endsWith('.docx')) format = 'word';
+                else if (file.name.endsWith('.xlsx')) format = 'excel';
+                if (format === 'other') continue;
+
+                const id = generateUUID();
+                const buffer = await file.arrayBuffer();
+                await templateFileStore.set(id, { url: '', name: file.name, type: file.type, data: buffer });
+
+                const entry = {
+                    id,
+                    name: file.name,
+                    format: format as 'word' | 'excel',
+                    checked: true
+                };
+                setTemplates(prev => [...prev.filter(p => !toRemoveIds.includes(p.id)), entry]);
+
+                lastId = id;
+                lastFormat = format;
+
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+
+            if (lastId) {
+                setSelectedTemplateId(lastId);
+                setSourceFormat(lastFormat);
+                flushPreview();
+            }
+        } catch (error) {
+            console.error("Critical error in addTemplates:", error);
+        }
+    }, [templates, flushPreview]);
+
+    const removeTemplate = useCallback(async (id: string) => {
+        await templateFileStore.delete(id);
+        setTemplates(prev => prev.filter(t => t.id !== id));
         if (selectedTemplateId === id) setSelectedTemplateId(null);
-    };
+    }, [selectedTemplateId]);
 
-    const toggleTemplateCheck = (id: string) => {
-        setTemplateFiles(prev => {
+    const toggleTemplateCheck = useCallback((id: string) => {
+        setTemplates(prev => {
             const next = prev.map(t => t.id === id ? { ...t, checked: !t.checked } : t);
             if (id === selectedTemplateId) {
                 const target = next.find(t => t.id === id);
@@ -239,15 +317,16 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
             }
             return next;
         });
-    };
-    const handleSetResume = (r: ResumeConfig) => importData(r, mode);
+    }, [selectedTemplateId]);
+
+    const handleSetResume = useCallback((r: ResumeConfig) => importData(r, mode), [importData, mode]);
 
     /**
      * 現在のエディタ上のテキスト（rawText）を現在のモードに基づいて再フォーマットする
      */
-    const reformat = async () => {
+    const reformat = useCallback(async () => {
         try {
-            let currentData: any;
+            let currentData: unknown;
             if (mode === 'json') {
                 currentData = JSON.parse(rawText);
                 setRawText(JSON.stringify(currentData, null, 2));
@@ -268,7 +347,7 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
             console.error('Reformat failed:', e);
             setParseError({ message: '整形に失敗しました: ' + (e instanceof Error ? e.message : String(e)) });
         }
-    };
+    }, [mode, rawText]);
 
     /**
      * エディタのモード（JSON/YAML）を切り替える
@@ -276,7 +355,7 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
      * 内部Stateではなく表示テキストを正とすることで、編集内容の消失（先祖返り）を防ぐ。
      * @param targetMode 切り替え先のモード
      */
-    const handleSetMode = (targetMode: EditorMode) => {
+    const handleSetMode = useCallback((targetMode: EditorMode) => {
         if (mode === targetMode) return;
 
         // モード切替時は、現在の rawText を正として変換を行う
@@ -292,7 +371,8 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
 
             // 正規化してステート更新（念のため）
             const normalized = normalizeResumeData(currentResume);
-            const merged = { ...normalized, portrait: (normalized as any).portrait || resume.portrait } as ResumeConfig;
+            const portrait = (currentResume as { portrait?: string }).portrait || resume.portrait;
+            const merged = { ...normalized, portrait } as ResumeConfig;
             setResumeState(merged);
 
             // 新しいモードでシリアライズ
@@ -300,23 +380,32 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
             setMode(targetMode);
             setRawText(newText);
             setParseError(null);
-        } catch (e) {
+        } catch (e: unknown) {
             console.error('Mode switch failed:', e);
             // パースエラーがある場合はモード切り替えを許可しないか、あるいは強制的に切り替えるか。
             // ユーザー体験としては「エラーがあります」と出して切り替えないのが安全。
             setParseError({ message: '構文エラーがあるためモードを切り替えられません: ' + (e instanceof Error ? e.message : String(e)) });
         }
-    };
+    }, [mode, rawText, resume.portrait]);
 
-    const handleSetPortraitFile = (file: File | null) => {
+    const handleSetPortraitFile = useCallback((file: File | null) => {
+        // 前の Blob URL を解放してメモリを還す
+        if (resume.portrait && resume.portrait.startsWith('blob:')) {
+            URL.revokeObjectURL(resume.portrait);
+        }
+
         setPortraitFileState(file);
-        if (!file) { setResumeState(prev => ({ ...prev, portrait: '' })); return; }
-        const r = new FileReader();
-        r.onload = (e) => { const d = e.target?.result as string; if (d) setResumeState(prev => ({ ...prev, portrait: d })); };
-        r.readAsDataURL(file);
-    };
+        if (!file) {
+            setResumeState(prev => ({ ...prev, portrait: '' }));
+            return;
+        }
 
-    const resetToSample = () => {
+        // 巨大な文字列(Base64)ではなく、参照(Blob URL)に置き換える
+        const blobUrl = URL.createObjectURL(file);
+        setResumeState(prev => ({ ...prev, portrait: blobUrl }));
+    }, [resume.portrait]);
+
+    const resetToSample = useCallback(() => {
         try {
             const parsed = yaml.load(sampleYaml, { schema: yaml.JSON_SCHEMA });
             if (parsed && typeof parsed === 'object') {
@@ -338,16 +427,48 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
             console.error('Failed to reset to sample:', e);
             setParseError({ message: 'サンプルデータの読み込みに失敗しました' });
         }
-    };
+    }, [mode]);
+
+    const contextValue = useMemo(() => ({
+        resume,
+        setResume: handleSetResume,
+        rawText,
+        setRawText: handleSetRawText,
+        mode,
+        setMode: handleSetMode,
+        parseError,
+        importData,
+        reformat,
+        sourceFormat,
+        templates,
+        // インライン関数をやめて、既存の addTemplates をラップしたものを定義
+        addTemplate: async (f: File) => addTemplates([f]),
+        addTemplates,
+        removeTemplate,
+        toggleTemplateCheck,
+        selectedTemplateId,
+        setSelectedTemplateId,
+        exportOptions,
+        setExportOptions,
+        previewMode,
+        setPreviewMode,
+        portraitFile,
+        setPortraitFile: handleSetPortraitFile,
+        resetToSample,
+        flushPreview,
+        flushCount
+    }), [
+        // ステート類
+        resume, rawText, mode, parseError, sourceFormat, templates,
+        selectedTemplateId, exportOptions, previewMode, portraitFile, flushCount,
+        // useCallback で保護された各関数
+        handleSetResume, handleSetRawText, handleSetMode, importData, reformat,
+        addTemplates, removeTemplate, toggleTemplateCheck, handleSetPortraitFile,
+        resetToSample, flushPreview
+    ]);
 
     return (
-        <ResumeContext.Provider value={{
-            resume, setResume: handleSetResume, rawText, setRawText: handleSetRawText, mode, setMode: handleSetMode, parseError, importData, reformat,
-            sourceFormat, templates: templateFiles, addTemplate: async (f, _fm) => addTemplates([f]), addTemplates, removeTemplate,
-            toggleTemplateCheck, selectedTemplateId, setSelectedTemplateId, exportOptions, setExportOptions, previewMode, setPreviewMode,
-            portraitFile, setPortraitFile: handleSetPortraitFile, resetToSample,
-            flushPreview, flushCount
-        }}>
+        <ResumeContext.Provider value={contextValue}>
             {children}
         </ResumeContext.Provider>
     );

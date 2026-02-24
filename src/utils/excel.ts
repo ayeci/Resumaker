@@ -4,6 +4,11 @@
  * Released under the MIT License.
  */
 
+export const EXCEL_MAX_ROW = 150;
+export const EXCEL_MAX_COL = 300;
+export const DEFAULT_ROW_HEIGHT = 19;
+export const DEFAULT_COL_WIDTH = 73;
+
 /** A, B, C... などの列文字を 0 始まりの数値インデックスに変換する */
 export const colToIdx = (col: string): number => {
     let idx = 0;

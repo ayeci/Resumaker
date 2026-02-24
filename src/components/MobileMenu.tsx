@@ -4,11 +4,11 @@
  * Released under the MIT License.
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 
 import NumberSpinner from './NumberSpinner';
 import { Box, Typography, IconButton, Checkbox, Divider } from '@mui/material';
-import { X, Printer, Download, FileText, LayoutTemplate, Upload, Settings, Shield, AlignLeft, FileSymlink, Type } from 'lucide-react';
+import { X, Printer, Download, LayoutTemplate, Upload, Settings, Shield, AlignLeft, FileSymlink, Type } from 'lucide-react';
 import { FaGithub } from "react-icons/fa";
 import { useResume } from '../context/ResumeHooks';
 import { ToggleButton, ToggleButtonGroup } from '@mui/material';
@@ -38,14 +38,19 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
 }) => {
     const {
         templates,
-        previewMode,
-        setPreviewMode,
         toggleTemplateCheck,
         mode,
         setMode,
         reformat,
-        resetToSample
+        resetToSample,
+        flushCount
     } = useResume();
+
+    useEffect(() => {
+        // flushCount が変わるたびにここが走るが、何もしなくても
+        // 「依存配列に入っている」ことで React が再レンダリングを検討します
+        console.log("Templates updated, flushing menu...");
+    }, [flushCount, templates]);
 
     const handleFormat = async () => {
         await reformat();
@@ -105,16 +110,16 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                         <Typography className={styles.menuLabel}>データ整形</Typography>
                     </Box>
 
-                    {/* 4. サンプルデータ再読込 */}
-                    <Box className={styles.menuItem} onClick={() => { handleReload(); onClose(); }}>
-                        <FileSymlink size={20} />
-                        <Typography className={styles.menuLabel}>サンプルデータ再読込</Typography>
-                    </Box>
-
-                    {/* 5. データ読込 */}
+                    {/* 4. データ読込 */}
                     <Box className={styles.menuItem} onClick={() => { onImport(); onClose(); }}>
                         <Upload size={20} />
                         <Typography className={styles.menuLabel}>データ読込</Typography>
+                    </Box>
+
+                    {/* 5. サンプルデータ再読込 */}
+                    <Box className={styles.menuItem} onClick={() => { handleReload(); onClose(); }}>
+                        <FileSymlink size={20} />
+                        <Typography className={styles.menuLabel}>サンプルデータ再読込</Typography>
                     </Box>
 
                     {/* 6. テンプレート読込 */}
@@ -123,11 +128,17 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                         <LayoutTemplate size={20} />
                         <Typography className={styles.menuLabel}>テンプレート読込</Typography>
                     </Box>
+
+                    {/* 7. 設定・表示切り替え（オプション系） */}
+                    <Box className={styles.menuItem} onClick={() => { onOpenSettings(); onClose(); }}>
+                        <Settings size={20} />
+                        <Typography className={styles.menuLabel}>テンプレート設定</Typography>
+                    </Box>
                 </Box>
 
                 <Divider className={styles.divider} />
 
-                {/* 7. 出力 */}
+                {/* 8. 出力 */}
                 <Box className={clsx(styles.menuGroup, styles.actionGroup)}>
                     <Box className={styles.menuItem} onClick={() => { onPrint(); onClose(); }}>
                         <Printer size={20} />
@@ -137,7 +148,6 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                         <Download size={20} />
                         <Typography className={styles.menuLabel}>テンプレート形式で保存</Typography>
                     </Box>
-
                     <Box className={styles.menuItem} onClick={() => { onExport('yaml'); onClose(); }}>
                         <Download size={20} />
                         <Typography className={styles.menuLabel}>YAMLで保存</Typography>
@@ -150,27 +160,10 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
 
                 <Divider className={styles.divider} />
 
-                {/* 8. 設定・表示切り替え（オプション系） */}
-                <Box className={clsx(styles.menuGroup, styles.settingsGroup)}>
-                    <Box className={styles.menuItem} onClick={() => { onOpenSettings(); onClose(); }}>
-                        <Settings size={20} />
-                        <Typography className={styles.menuLabel}>テンプレート設定</Typography>
-                    </Box>
-
-                    <Box className={styles.menuItem} onClick={() => setPreviewMode(previewMode === 'standard' ? 'template' : 'standard')}>
-                        {previewMode === 'standard' ? <LayoutTemplate size={20} /> : <FileText size={20} />}
-                        <Typography className={styles.menuLabel}>
-                            {previewMode === 'standard' ? 'テンプレート表示へ' : '標準表示へ'}
-                        </Typography>
-                    </Box>
-                </Box>
-
-                <Divider className={styles.divider} />
-
                 {/* 9. 各テンプレートの表示・出力切り替え */}
                 <Box className={styles.menuGroup}>
                     <Typography variant="caption" sx={{ px: 2, py: 1, display: 'block', color: '#6b7280', fontWeight: 600 }}>
-                        テンプレート選択
+                        保存対象のテンプレート選択
                     </Typography>
                     {templates && templates.length > 0 ? templates.map((t) => (
                         <Box key={t.id} className={styles.menuItem} onClick={() => toggleTemplateCheck(t.id)}>
@@ -194,7 +187,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                         </Typography>
                     </Box>
                     <Box className={styles.footerLinks}>
-                        <a href="https://github.com/AyeBee/Resumaker" target="_blank" rel="noopener noreferrer">
+                        <a href="https://github.com/AyeCi/Resumaker" target="_blank" rel="noopener noreferrer">
                             <FaGithub size={16} />
                             <span>GitHub</span>
                         </a>

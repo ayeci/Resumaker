@@ -9,18 +9,32 @@ import type { CSSProperties, PointerEvent } from 'react';
 import { useResume } from '../context/ResumeHooks';
 import styles from './Preview.module.scss';
 import clsx from 'clsx';
-import WordPreview from './WordPreview';
+import { WordPreview } from './WordPreview';
 import StandardPreview, { A4_WIDTH_MM, A4_HEIGHT_MM } from './StandardPreview';
-import { Box, IconButton, Tooltip } from '@mui/material';
+import { Box, IconButton, Tooltip, Typography } from '@mui/material';
 import { RotateCcw } from 'lucide-react';
 import { usePreviewTrigger } from '../hooks/usePreviewTrigger';
 import { ErrorBoundary } from './ErrorBoundary';
+import { templateFileStore } from '../store/fileStore';
+import { checkIsMobile } from '../utils/device';
+import { SESSION_KEYS } from '../utils/sessionKeys';
+import { useNotification } from './NotificationContext';
 
 const ExcelPreview = lazy(() => import('./ExcelPreview'));
 const MM_TO_PX = 3.78;
 
 export const Preview: React.FC = () => {
+    const { notify } = useNotification();
     const { resume, templates, selectedTemplateId, previewMode, exportOptions, flushCount } = useResume();
+    const [isLoading, setIsLoading] = useState(false);
+
+    // モバイル判定
+    const [isMobileEnv, setIsMobileEnv] = useState(checkIsMobile());
+    useLayoutEffect(() => {
+        const handleResize = () => setIsMobileEnv(checkIsMobile());
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     // デバウンス済みのプレビュー用履歴書データ
     const { previewResume } = usePreviewTrigger(resume, flushCount);
@@ -48,6 +62,65 @@ export const Preview: React.FC = () => {
     const scaleRef = useRef(scale);
 
     const selectedTemplate = templates.find(t => t.id === selectedTemplateId) ?? null;
+
+    const [actualFile, setActualFile] = useState<File | null>(null);
+
+    useEffect(() => {
+        if (!isLoading) {
+            const timer = setTimeout(() => {
+                sessionStorage.removeItem(SESSION_KEYS.HEAVY_TASK);
+            }, 1000); // 1秒以内にisLoadingがtrueになれば、この消去はキャンセルされる
+            return () => clearTimeout(timer);
+        }
+    }, [isLoading]);
+
+    useEffect(() => {
+        let isMounted = true;
+
+        const loadFile = async () => {
+            if (previewMode === 'template' && selectedTemplateId) {
+                setActualFile(null);
+
+                // 1. ストレージからデータを取得
+                const fileData = await templateFileStore.get(selectedTemplateId);
+
+                if (fileData) {
+                    try {
+                        // ストアに保持されている Blob/File を直接使用（fetch コピーを廃止）
+                        if (isMounted) {// 2. スマホブラウザ向けに、型を厳密に定義したBlobを作成
+                            const blob = new Blob([fileData.data], {
+                                type: fileData.type || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                            });
+
+                            // 3. Fileオブジェクトとして再構成（名前と最終更新日を付与）
+                            const file = new File([blob], fileData.name, {
+                                type: blob.type,
+                                lastModified: Date.now()
+                            });
+
+                            // 4. 【重要】一部のモバイルブラウザ向けにObjectURLを生成して
+                            // データの存在をブラウザのメモリに「ピン留め」する
+                            const tempUrl = URL.createObjectURL(file);
+
+                            setActualFile(file);
+
+                            // 5. クリーンアップ：コンポーネントが消える時にURLを解放する
+                            return () => URL.revokeObjectURL(tempUrl);
+                        }
+                    } catch (e) {
+                        notify("template-load-error", "error", "テンプレートの復号または展開に失敗しました");
+                        console.error("テンプレートの復号または展開に失敗しました", e);
+                    }
+                }
+            } else {
+                setActualFile(null);
+            }
+        };
+
+        loadFile();
+
+        return () => { isMounted = false; };
+    }, [previewMode, selectedTemplateId, notify]);
 
     // コンテンツから報告されたサイズ（論理サイズ, defaultはA4サイズ基準）
     const [contentSize, setContentSize] = useState({
@@ -129,7 +202,7 @@ export const Preview: React.FC = () => {
 
         const isMobile = window.innerWidth <= 768;
         // モバイルではスクロールバーの出現/消失による ResizeObserver 無限ループ（Reactのクラッシュ、真っ白な画面）を防ぐため、
-        // viewport.clientWidth を避け window.innerWidth で固定します。
+        // viewport.clientWidth を避け window.innerWidth で固定する。
         const parentWidth = isMobile ? window.innerWidth : (viewport.clientWidth > 0 ? viewport.clientWidth : window.innerWidth);
         const size = forcedSize || contentSize;
 
@@ -387,28 +460,60 @@ export const Preview: React.FC = () => {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [updateScale]);
 
+    const renderLoading = () => (
+        <div className={styles.renderingOverlay}>
+            <div className={styles.renderingContainer}>
+                <div className={styles.rendering}></div>
+                <div className={styles.loadingText}>生成中...</div>
+            </div>
+        </div>
+    );
+
     const renderContent = () => {
         if (previewMode === 'template' && selectedTemplate) {
+            // モバイル環境の場合はプレビューを描画せず、メッセージを表示
+            if (isMobileEnv) {
+                return (
+                    <Box sx={{ p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', textAlign: 'center', color: 'text.secondary' }}>
+                        <Typography variant="h6" gutterBottom>プレビュー非表示</Typography>
+                        <Typography variant="body2" sx={{ lineHeight: 1.8 }}>
+                            モバイル端末でのメモリ不足（ブラウザの強制終了）を防ぐため、<br />
+                            テンプレートのプレビュー表示を制限しています。<br /><br />
+                            データは正常に読み込まれています。<br />
+                            メニューからファイルを出力してご確認ください。
+                        </Typography>
+                    </Box>
+                );
+            }
+
+            if (!actualFile) {
+                return <div>ファイルが見つかりません</div>;
+            }
+
             return (
                 <Box className={styles.templateWrapper}>
-                    {selectedTemplate.format === 'excel' ? (
-                        <Suspense fallback={<div>Loading Excel Preview...</div>}>
+                    <Suspense fallback={renderLoading()}>
+                        {selectedTemplate.format === 'excel' ? (
                             <ExcelPreview
-                                templateBuffer={selectedTemplate.arrayBuffer}
+                                key={selectedTemplate.id}
+                                file={actualFile} // キャッシュされたFileを渡す
                                 resume={previewResume}
                                 onSizeChange={handleSizeChange}
+                                setIsLoading={setIsLoading}
                             />
-                        </Suspense>
-                    ) : selectedTemplate.format === 'word' ? (
-                        <WordPreview
-                            templateBuffer={selectedTemplate.arrayBuffer}
-                            resume={previewResume}
-                            options={exportOptions}
-                            onSizeChange={handleSizeChange}
-                        />
-                    ) : (
-                        <div>サポートされていないフォーマットです</div>
-                    )}
+                        ) : selectedTemplate.format === 'word' ? (
+                            <WordPreview
+                                key={selectedTemplate.id}
+                                file={actualFile} // キャッシュされたFileを渡す
+                                resume={previewResume}
+                                options={exportOptions}
+                                onSizeChange={handleSizeChange}
+                                setIsLoading={setIsLoading}
+                            />
+                        ) : (
+                            <Box sx={{ p: 2 }}>サポートされていないフォーマットです</Box>
+                        )}
+                    </Suspense>
                 </Box>
             );
         }
@@ -502,6 +607,9 @@ export const Preview: React.FC = () => {
                     </Box>
                 </Box>
             </Box>
+
+            {/* 共通ローディング表示 (変換中など) */}
+            {isLoading && renderLoading()}
 
             {/* ズーム/パンのリセットボタン */}
             <Box

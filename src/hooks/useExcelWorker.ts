@@ -4,132 +4,105 @@
  * Released under the MIT License.
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { ResumeConfig } from '../types/resume';
 
-/** FortuneSheet変換結果の型 */
 interface FortuneSheetResult {
     sheets: Record<string, unknown>[];
     [key: string]: unknown;
 }
 
-/** Workerからの応答メッセージの型 */
-interface WorkerResponse {
-    type: 'SUCCESS' | 'ERROR';
-    data?: FortuneSheetResult;
-    error?: string;
+interface WorkerTask {
+    resume: ResumeConfig;
+    file: File;
+    resolve: (value: FortuneSheetResult) => void;
+    reject: (reason: Error) => void;
 }
 
-/** useExcelWorkerの戻り値 */
-interface UseExcelWorkerReturn {
-    /** Worker経由でExcel生成→FortuneSheet変換を実行し、結果をPromiseで返す */
-    generatePreview: (resume: ResumeConfig, templateBuffer: ArrayBuffer) => Promise<FortuneSheetResult>;
-    /** 処理中フラグ */
-    isLoading: boolean;
-    /** エラー情報 */
-    error: string | null;
-    /** 成功時のFortuneSheetデータ（sheetsなど） */
-    data: FortuneSheetResult | null;
-}
+/** Reactの外側（グローバル）で唯一の Worker と 行列（キュー）を管理 */
+let worker: Worker | null = null;
+const taskQueue: WorkerTask[] = [];
+let isProcessing = false;
 
-/**
- * Excel生成処理をWeb Workerで実行するカスタムフック
- *
- * - Vite環境対応の Worker 構文を使用
- * - コンポーネントアンマウント時に自動で worker.terminate()
- * - generatePreview は Promise を返す
- */
-export const useExcelWorker = (): UseExcelWorkerReturn => {
+const processNextTask = () => {
+    if (isProcessing || taskQueue.length === 0) return;
+    isProcessing = true;
+
+    // 1タスクごとに新しいWorkerを作る（常にクリーンなメモリ空間からスタート）
+    worker = new Worker(
+        new URL('../worker/excel.worker.ts', import.meta.url),
+        { type: 'module' }
+    );
+
+    const currentTask = taskQueue.shift()!;
+
+    const cleanupAndNext = () => {
+        // 処理が終わったらWorkerを終了してOSにメモリを完全返還する
+        if (worker) {
+            worker.terminate();
+            worker = null;
+        }
+        isProcessing = false;
+        // 次のタスクまで少し休んで、OSのガベージコレクションを促す
+        setTimeout(processNextTask, 150);
+    };
+
+    worker.onmessage = (e: MessageEvent) => {
+        const { type, data, error } = e.data;
+        if (type === 'SUCCESS') currentTask.resolve(data);
+        else currentTask.reject(new Error(error || 'Worker処理エラー'));
+        cleanupAndNext();
+    };
+
+    worker.onerror = (e) => {
+        currentTask.reject(new Error(`Worker致命的エラー: ${e.message}`));
+        cleanupAndNext();
+    };
+
+    // Workerには File オブジェクトを直接送る
+    worker.postMessage({
+        type: 'PROCESS_EXCEL',
+        payload: { resume: currentTask.resume, file: currentTask.file }
+    });
+};
+
+const enqueueExcelTask = (resume: ResumeConfig, file: File): Promise<FortuneSheetResult> => {
+    return new Promise((resolve, reject) => {
+        taskQueue.push({ resume, file, resolve, reject });
+        processNextTask();
+    });
+};
+
+/** フック本体 */
+export const useExcelWorker = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [data, setData] = useState<FortuneSheetResult | null>(null);
+    const isMounted = useRef(true);
 
-    // Workerインスタンスを保持
-    const workerRef = useRef<Worker | null>(null);
-    // Promise の resolve/reject を保持
-    const pendingRef = useRef<{
-        resolve: (value: FortuneSheetResult) => void;
-        reject: (reason: Error) => void;
-    } | null>(null);
-
-    // Worker初期化（マウント時に1回だけ）
     useEffect(() => {
-        const worker = new Worker(
-            new URL('../worker/excel.worker.ts', import.meta.url),
-            { type: 'module' }
-        );
-
-        worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
-            const { type, data: responseData, error: responseError } = e.data;
-
-            if (type === 'SUCCESS' && responseData) {
-                setData(responseData);
-                setError(null);
-                setIsLoading(false);
-                pendingRef.current?.resolve(responseData);
-            } else if (type === 'ERROR') {
-                const errMsg = responseError || '不明なエラーが発生しました';
-                setError(errMsg);
-                setData(null);
-                setIsLoading(false);
-                pendingRef.current?.reject(new Error(errMsg));
-            }
-
-            pendingRef.current = null;
-        };
-
-        worker.onerror = (e) => {
-            const errMsg = `Worker エラー: ${e.message}`;
-            setError(errMsg);
-            setData(null);
-            setIsLoading(false);
-            pendingRef.current?.reject(new Error(errMsg));
-            pendingRef.current = null;
-        };
-
-        workerRef.current = worker;
-
-        // クリーンアップ: アンマウント時にWorkerを終了
-        return () => {
-            worker.terminate();
-            workerRef.current = null;
-            // 未解決のPromiseがあればreject
-            if (pendingRef.current) {
-                pendingRef.current.reject(new Error('コンポーネントがアンマウントされました'));
-                pendingRef.current = null;
-            }
-        };
+        isMounted.current = true;
+        return () => { isMounted.current = false; };
     }, []);
 
-    /**
-     * Worker経由でExcel生成→FortuneSheet変換を実行する
-     * @param resume 履歴書データ
-     * @param templateBuffer テンプレートのArrayBuffer
-     * @returns FortuneSheetデータ (Promise)
-     */
-    const generatePreview = useCallback((resume: ResumeConfig, templateBuffer: ArrayBuffer): Promise<FortuneSheetResult> => {
-        return new Promise<FortuneSheetResult>((resolve, reject) => {
-            if (!workerRef.current) {
-                const err = new Error('Worker が初期化されていません');
+    const generatePreview = useCallback(async (resume: ResumeConfig, file: File) => {
+        setIsLoading(true);
+        setError(null);
+        try {
+            const result = await enqueueExcelTask(resume, file);
+            if (isMounted.current) {
+                setData(result);
+                setIsLoading(false);
+            }
+            return result;
+        } catch (err: any) {
+            if (isMounted.current) {
                 setError(err.message);
-                reject(err);
-                return;
+                setData(null);
+                setIsLoading(false);
             }
-
-            // 前回の未解決Promiseがあればreject
-            if (pendingRef.current) {
-                pendingRef.current.reject(new Error('新しいリクエストにより前回の処理がキャンセルされました'));
-            }
-
-            setIsLoading(true);
-            setError(null);
-            pendingRef.current = { resolve, reject };
-
-            workerRef.current.postMessage({
-                type: 'PROCESS_EXCEL',
-                payload: { resume, templateBuffer }
-            });
-        });
+            throw err;
+        }
     }, []);
 
     return { generatePreview, isLoading, error, data };
