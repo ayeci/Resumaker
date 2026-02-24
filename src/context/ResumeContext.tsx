@@ -238,7 +238,6 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
 
         const currentFiles = [...templates];
         const toRemoveIds: string[] = [];
-        const newEntries: TemplateEntry[] = [];
 
         for (const file of files) {
             const dup = currentFiles.find(t => t.name === file.name);
