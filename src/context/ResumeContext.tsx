@@ -11,7 +11,7 @@ import { ResumeContext, type EditorMode } from './ResumeHooks';
 import { normalizeResumeData } from '../utils/importer';
 import sampleYaml from '../../example/sample.yaml?raw'; // サンプルデータを読み込む
 import { generateUUID } from '../utils/uuid';
-import { templateFileStore } from '../store/fileStore';
+import { templateFileStore, clearTemplateFileStore } from '../store/fileStore';
 import { checkNeedsLimit } from '../utils/device';
 
 type RecursivePartial<T> = {
@@ -123,31 +123,37 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
     const [portraitFile, setPortraitFileState] = useState<File | null>(null);
 
     useEffect(() => {
-        const loadPersistedTemplates = async () => {
+        const initTemplateStore = async () => {
             try {
-                // ストレージからメタデータを取得
-                const metadataList = await templateFileStore.getMetadataList();
-                if (metadataList.length > 0) {
-                    const restoredTemplates: TemplateEntry[] = metadataList.map(m => ({
-                        id: m.id,
-                        name: m.name,
-                        format: m.name.endsWith('.docx') ? 'word' : 'excel' as const,
-                        checked: true
-                        // data はここには持たないことでメモリを節約
-                    }));
-                    setTemplates(restoredTemplates);
+                // まず前セッションのデータを全消去（データ残存防止）
+                await clearTemplateFileStore();
 
-                    // 最初のテンプレートをデフォルト選択にする
-                    const first = restoredTemplates[0];
-                    setSelectedTemplateId(first.id);
-                    setSourceFormat(first.format);
+                // PC（暗号化有効環境）のみテンプレートの復元を試行
+                // モバイル（暗号化なし）では復元しない:
+                //   前セッションの揮発性キーは消失しているため暗号化済みデータは復号不可
+                //   平文データは意図しない復元を防ぐため読み込まない
+                if (!checkNeedsLimit()) {
+                    const metadataList = await templateFileStore.getMetadataList();
+                    if (metadataList.length > 0) {
+                        const restoredTemplates: TemplateEntry[] = metadataList.map(m => ({
+                            id: m.id,
+                            name: m.name,
+                            format: m.name.endsWith('.docx') ? 'word' : 'excel' as const,
+                            checked: true
+                        }));
+                        setTemplates(restoredTemplates);
+
+                        const first = restoredTemplates[0];
+                        setSelectedTemplateId(first.id);
+                        setSourceFormat(first.format);
+                    }
                 }
             } catch (error) {
-                console.error("Failed to load templates from IDB:", error);
+                console.error("Failed to initialize template store:", error);
             }
         };
 
-        loadPersistedTemplates();
+        initTemplateStore();
     }, []); // 初回マウント時のみ実行
 
     // プレビュー即時更新シグナル
@@ -232,68 +238,56 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
         }
     }, [mode, resume.portrait]);
 
+    /**
+     * テンプレートを1件追加する（既存の同名ファイルは自動的に置換される）
+     * 複数ファイルの場合はApp.tsx側で1件ずつ呼び出す。
+     * これにより各呼び出しのasyncクロージャが完全に解放され、GCが確実に効く。
+     */
     const addTemplates = useCallback(async (files: File[]) => {
         const needsLimit = checkNeedsLimit();
         const MAX_TEMPLATES_OF_MOBILE = 5;
 
-        const currentFiles = [...templates];
-        const toRemoveIds: string[] = [];
-
         for (const file of files) {
-            const dup = currentFiles.find(t => t.name === file.name);
-            if (dup) toRemoveIds.push(dup.id);
-        }
+            let format: 'word' | 'excel' | 'other' = 'other';
+            if (file.name.endsWith('.docx')) format = 'word';
+            else if (file.name.endsWith('.xlsx')) format = 'excel';
+            if (format === 'other') continue;
 
-        const targetCount = (currentFiles.length - toRemoveIds.length) + files.length;
-        if (needsLimit && targetCount > MAX_TEMPLATES_OF_MOBILE) {
-            const overCount = targetCount - MAX_TEMPLATES_OF_MOBILE;
-            const remaining = currentFiles.filter(f => !toRemoveIds.includes(f.id));
-            const extra = remaining.slice(0, overCount);
-            extra.forEach(e => toRemoveIds.push(e.id));
-        }
+            const id = generateUUID();
+            const fileName = file.name;
+            const fileType = file.type;
 
-        try {
-            // IndexedDBの操作
-            for (const id of toRemoveIds) {
-                await templateFileStore.delete(id);
-            }
+            // ファイル読み込み
+            const buffer = await file.arrayBuffer();
 
-            let lastId: string | null = null;
-            let lastFormat: 'word' | 'excel' | null = null;
+            // 保存
+            await templateFileStore.set(id, {
+                url: '', name: fileName, type: fileType, data: buffer
+            });
 
-            for (const file of files) {
-                let format: 'word' | 'excel' | 'other' = 'other';
-                if (file.name.endsWith('.docx')) format = 'word';
-                else if (file.name.endsWith('.xlsx')) format = 'excel';
-                if (format === 'other') continue;
-
-                const id = generateUUID();
-                const buffer = await file.arrayBuffer();
-                await templateFileStore.set(id, { url: '', name: file.name, type: file.type, data: buffer });
-
-                const entry = {
+            // State更新: 同名テンプレートの置換 + 上限管理
+            setTemplates(prev => {
+                let next = [...prev.filter(t => t.name !== fileName), {
                     id,
-                    name: file.name,
+                    name: fileName,
                     format: format as 'word' | 'excel',
                     checked: true
-                };
-                setTemplates(prev => [...prev.filter(p => !toRemoveIds.includes(p.id)), entry]);
+                }];
+                // モバイルの上限を超えた場合、古いテンプレートを先頭から削除
+                if (needsLimit && next.length > MAX_TEMPLATES_OF_MOBILE) {
+                    const excess = next.slice(0, next.length - MAX_TEMPLATES_OF_MOBILE);
+                    excess.forEach(e => templateFileStore.delete(e.id));
+                    next = next.slice(next.length - MAX_TEMPLATES_OF_MOBILE);
+                }
+                return next;
+            });
 
-                lastId = id;
-                lastFormat = format;
-
-                await new Promise(resolve => setTimeout(resolve, 50));
-            }
-
-            if (lastId) {
-                setSelectedTemplateId(lastId);
-                setSourceFormat(lastFormat);
-                flushPreview();
-            }
-        } catch (error) {
-            console.error("Critical error in addTemplates:", error);
+            setSelectedTemplateId(id);
+            setSourceFormat(format as 'word' | 'excel');
         }
-    }, [templates, flushPreview]);
+
+        flushPreview();
+    }, [flushPreview]);
 
     const removeTemplate = useCallback(async (id: string) => {
         await templateFileStore.delete(id);

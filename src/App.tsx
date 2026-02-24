@@ -22,7 +22,7 @@ import PizZip from 'pizzip';
 import { saveAs } from 'file-saver';
 import { NotificationProvider } from './components/Notification';
 import { useNotification } from './components/NotificationContext';
-import { clearTemplateFileStore, templateFileStore } from './store/fileStore';
+import { templateFileStore } from './store/fileStore';
 import { checkIsMobile, checkNeedsLimit } from './utils/device';
 import { SESSION_KEYS } from './utils/sessionKeys';
 
@@ -34,10 +34,7 @@ const MAX_TEMPLATES = 5;
 function AppContent() {
   const { resume, templates, addTemplates, selectedTemplateId, setSelectedTemplateId, previewMode, setPreviewMode, exportOptions, importData, toggleTemplateCheck } = useResume();
 
-  // DBのクリア
-  useEffect(() => {
-    clearTemplateFileStore();
-  }, []);
+
 
   const [isExporting, setIsExporting] = useState(false);
   const [optionDialogOpen, setOptionDialogOpen] = useState(false);
@@ -490,7 +487,10 @@ function AppContent() {
             return;
           }
 
-          let filesArray = Array.from(files);
+          // File オブジェクトをコピーしてから、DOM の FileList 参照を即座に解放
+          // Android Chrome ではファイルピッカーの FileList がメモリを保持し続けるため
+          const filesArray: (File | null)[] = Array.from(files);
+          targetInput.value = ''; // FileList を解放（処理に先行して実行）
 
           setSelectedTemplateId(null);
           setPreviewMode('standard');
@@ -502,21 +502,38 @@ function AppContent() {
 
           if (needsLimit && filesArray.length > MAX_TEMPLATES) {
             notify("template-limit-reached", "warning", `先頭の${MAX_TEMPLATES}件のみ読み込みました。モバイル環境ではメモリの制約のため一度に読み込めるテンプレートが制限されます。`);
-            filesArray = filesArray.slice(0, MAX_TEMPLATES);
+            filesArray.length = MAX_TEMPLATES; // splice で不要な参照を即座に切る
           }
 
           try {
-            // ここで addTemplates を呼ぶ
-            await addTemplates(filesArray);
+            const needsLimitFlag = checkNeedsLimit();
+
+            // 5件一括ではなく、1件ずつaddTemplatesを呼び出すことでクラッシュを防止
+            // 理由: 1つの async 関数クロージャ内で全ファイルを処理すると、
+            // V8 のアクティベーションレコードがすべてのローカル変数を
+            // await 間で保持し続け、GC が効かずメモリスパイクが発生する。
+            // 1件ずつ呼び出せば各 async クロージャは return 後に即座に GC 対象になる。
+            for (let i = 0; i < filesArray.length; i++) {
+              const file = filesArray[i];
+              if (!file) continue;
+              filesArray[i] = null; // File 参照を先に切断
+
+              await addTemplates([file]);
+
+              // モバイルではGCに十分な時間を与える
+              if (needsLimitFlag) {
+                await new Promise(r => setTimeout(r, 500));
+              }
+            }
 
             setPreviewMode('template');
-            if (!needsLimit) {
+            if (!needsLimitFlag) {
               setMobileView('preview');
             } else {
               setMobileView('editor');
             }
           } finally {
-            targetInput.value = '';
+            filesArray.length = 0;
           }
         }} />
         <input type="file" title="データを読み込む" ref={importInputRef} className={styles.hiddenInput} accept=".json,.yaml,.yml" onClick={(e) => {

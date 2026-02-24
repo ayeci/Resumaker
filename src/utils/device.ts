@@ -5,11 +5,20 @@
  */
 
 /**
- * モバイル環境（画面サイズ）かどうかを判定します
+ * 画面サイズに基づいて「モバイル表示」が必要かどうかを判定します
  */
 export const checkIsMobile = (): boolean => {
     if (typeof window === 'undefined') return false;
     return window.innerWidth <= 768 || (window.innerWidth <= 900 && window.matchMedia('(orientation: landscape)').matches);
+};
+
+/**
+ * Android, iOS, iPad などのモバイルプラットフォームかどうかを判定します
+ */
+export const checkIsMobilePlatform = (): boolean => {
+    if (typeof navigator === 'undefined') return false;
+    const ua = navigator.userAgent || '';
+    return /Android|iPhone|iPad|iPod|Windows Phone/i.test(ua);
 };
 
 /**
@@ -18,12 +27,15 @@ export const checkIsMobile = (): boolean => {
 export const checkIsLowMemory = (): boolean => {
     if (typeof navigator === 'undefined') return false;
     const nav = navigator as any;
+    // nav.deviceMemory はChromeなどの一部のブラウザのみサポート
     return nav.deviceMemory !== undefined && nav.deviceMemory < 8;
 };
 
 /**
- * メモリ節約（機能制限）が必要な環境かどうかを判定します
+ * メモリ節約（機能制限・暗号化スキップ・IDB回避）が必要な環境かどうかを判定します。
+ * PCでウィンドウサイズを小さくしただけのケースをモバイルと誤認しないよう、
+ * プラットフォームとRAM容量を優先して判定します。
  */
 export const checkNeedsLimit = (): boolean => {
-    return checkIsMobile() || checkIsLowMemory();
+    return checkIsMobilePlatform() || checkIsLowMemory();
 };

@@ -4,6 +4,8 @@
  * Released under the MIT License.
  */
 
+import { checkNeedsLimit } from '../utils/device';
+
 export interface StoredTemplate {
     url: string;
     name: string;
@@ -22,16 +24,23 @@ interface EncryptedRecord {
 const DB_NAME = 'ResumakerDB';
 const STORE_NAME = 'templates';
 
+// ── モバイル向けインメモリストア ──
+// IndexedDB を使わずメモリ上で管理することで、IDB の内部キャッシュによる
+// メモリ圧迫を完全に排除する。タブリロード時にはデータが消失するが、
+// 元々 clearTemplateFileStore() で毎回消去していたため動作上の違いはない。
+const inMemoryStore = new Map<string, StoredTemplate>();
+
+// ── 暗号化キー管理（デスクトップ専用） ──
+
 /** 揮発性暗号化キー(RAM上にのみ存在し、メモリクリアされたら消える) */
 let volatileKey: CryptoKey | null = null;
 
 /** 
- * 暗号化キーを取得する
+ * 暗号化キーを取得する（デスクトップ専用）
  * @returns CryptoKey 暗号化キー
  */
-const getEncryptionKey = async (): Promise<CryptoKey> => {// 安全でないコンテキスト (HTTP) では crypto.subtle が undefined になる
+const getEncryptionKey = async (): Promise<CryptoKey> => {
     if (!window.isSecureContext || !crypto.subtle) {
-        // nullを返すと型エラーになるので、エラーを投げて呼び出し側のcatchに飛ばす
         throw new Error("SECURE_CONTEXT_ERROR");
     }
     return volatileKey ? volatileKey : volatileKey = await crypto.subtle.generateKey(
@@ -41,14 +50,10 @@ const getEncryptionKey = async (): Promise<CryptoKey> => {// 安全でないコ�
     );
 };
 
-// IndexedDBの初期化
+// ── IndexedDB（デスクトップ専用） ──
 
 let dbInstance: IDBDatabase | null = null;
 
-/** 
- * IndexedDBのインスタンスを取得する
- * @returns Promise<IDBDatabase> IndexedDBのインスタンス
- */
 const getDBInstance = (): Promise<IDBDatabase> => {
     if (dbInstance) return Promise.resolve(dbInstance);
 
@@ -67,11 +72,19 @@ const getDBInstance = (): Promise<IDBDatabase> => {
     });
 }
 
+// ── ストアAPI（モバイル: Map / デスクトップ: IndexedDB+暗号化）──
+
 /**
- * ストア操作（暗号化・復号の自動ラップ）
+ * モバイルかどうかでストレージ戦略を切り替えるユニファイドAPI
  */
 export const templateFileStore = {
     async get(id: string): Promise<StoredTemplate | undefined> {
+        // モバイル: インメモリから直接取得
+        if (checkNeedsLimit()) {
+            return inMemoryStore.get(id);
+        }
+
+        // デスクトップ: IndexedDB + 復号
         try {
             const db = await getDBInstance();
             const record: EncryptedRecord | undefined = await new Promise((resolve, reject) => {
@@ -103,6 +116,13 @@ export const templateFileStore = {
     },
 
     async set(id: string, value: StoredTemplate): Promise<void> {
+        // モバイル: インメモリに保存（IDB書き込みゼロ）
+        if (checkNeedsLimit()) {
+            inMemoryStore.set(id, value);
+            return;
+        }
+
+        // デスクトップ: 暗号化 + IndexedDB
         const key = await getEncryptionKey();
         const iv = crypto.getRandomValues(new Uint8Array(12));
         const encryptedData = await crypto.subtle.encrypt(
@@ -129,6 +149,13 @@ export const templateFileStore = {
     },
 
     async delete(id: string): Promise<void> {
+        // モバイル: インメモリから削除
+        if (checkNeedsLimit()) {
+            inMemoryStore.delete(id);
+            return;
+        }
+
+        // デスクトップ: IndexedDB から削除
         const db = await getDBInstance();
         await new Promise<void>((resolve, reject) => {
             const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -137,35 +164,40 @@ export const templateFileStore = {
             request.onerror = () => reject(request.error);
         });
     },
+
     async keys(): Promise<string[]> {
+        if (checkNeedsLimit()) {
+            return Array.from(inMemoryStore.keys());
+        }
+
         const db = await getDBInstance();
         return await new Promise((resolve, reject) => {
             const tx = db.transaction(STORE_NAME, 'readonly');
             const store = tx.objectStore(STORE_NAME);
-
-            // getAllKeys() を使用してすべての ID を取得
             const request = store.getAllKeys();
-
             request.onsuccess = () => resolve(request.result as string[]);
             request.onerror = () => reject(request.error);
         });
     },
+
     async getMetadataList(): Promise<{ id: string, name: string }[]> {
+        if (checkNeedsLimit()) {
+            return Array.from(inMemoryStore.entries()).map(([id, val]) => ({
+                id,
+                name: val.name
+            }));
+        }
+
         const db = await getDBInstance();
         return new Promise((resolve, reject) => {
             const tx = db.transaction(STORE_NAME, 'readonly');
             const store = tx.objectStore(STORE_NAME);
-
-            // getAllRecordsで中身を、getAllKeysでIDを同時に取得
             const request = store.getAll();
             const keyRequest = store.getAllKeys();
 
             tx.oncomplete = () => {
                 const records = request.result as EncryptedRecord[];
                 const ids = keyRequest.result as string[];
-
-                // 暗号化された binary データ (encryptedData) は無視して、
-                // 平文の name と id だけを返す
                 const metadata = records.map((rec, index) => ({
                     id: ids[index],
                     name: rec.name
@@ -182,6 +214,13 @@ export const templateFileStore = {
  * ストア内の全データを削除する
  */
 export const clearTemplateFileStore = async (): Promise<void> => {
+    // モバイル: インメモリストアをクリア
+    if (checkNeedsLimit()) {
+        inMemoryStore.clear();
+        return;
+    }
+
+    // デスクトップ: IndexedDB をクリア
     try {
         const db = await getDBInstance();
         return new Promise((resolve, reject) => {
@@ -197,25 +236,25 @@ export const clearTemplateFileStore = async (): Promise<void> => {
 
 /**
  * 保存されている全テンプレートのメタデータ（ID、名前）のみを取得する
- * @returns Promise<{ id: string, name: string }[]> メタデータ(id, name)の配列
  */
 export const getMetadataList = async (): Promise<{ id: string, name: string }[]> => {
-    const db = await getDBInstance();
+    if (checkNeedsLimit()) {
+        return Array.from(inMemoryStore.entries()).map(([id, val]) => ({
+            id,
+            name: val.name
+        }));
+    }
 
+    const db = await getDBInstance();
     return new Promise((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, 'readonly');
         const store = tx.objectStore(STORE_NAME);
-
-        // getAllRecordsで中身を、getAllKeysでIDを同時に取得
         const request = store.getAll();
         const keyRequest = store.getAllKeys();
 
         tx.oncomplete = () => {
             const records = request.result as EncryptedRecord[];
             const ids = keyRequest.result as string[];
-
-            // 暗号化された binary データ (encryptedData) は無視して、
-            // 平文の name と id だけを返す
             const metadata = records.map((rec, index) => ({
                 id: ids[index],
                 name: rec.name
