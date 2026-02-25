@@ -8,7 +8,7 @@ export default defineConfig(async () => {
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'web-app-manifest-192x192.png', 'web-app-manifest-512x512.png'],
+      includeAssets: ['favicon.ico', 'favicon.svg', 'apple-touch-icon.png', 'web-app-manifest-192x192.png', 'web-app-manifest-512x512.png'],
       workbox: {
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
       },
@@ -17,13 +17,13 @@ export default defineConfig(async () => {
         "short_name": "Resumaker",
         "icons": [
           {
-            "src": "/web-app-manifest-192x192.png",
+            "src": "web-app-manifest-192x192.png",
             "sizes": "192x192",
             "type": "image/png",
             "purpose": "maskable"
           },
           {
-            "src": "/web-app-manifest-512x512.png",
+            "src": "web-app-manifest-512x512.png",
             "sizes": "512x512",
             "type": "image/png",
             "purpose": "maskable"

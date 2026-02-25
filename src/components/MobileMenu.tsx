@@ -207,18 +207,18 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                 {/* 10. アプリ情報 */}
                 <Box className={styles.footerInfo}>
                     <Box className={styles.appName}>
-                        <LayoutTemplate size={24} className={styles.logoPrimary} />
+                        <img src={import.meta.env.BASE_URL + 'favicon.svg'} title="Resumaker logo" alt="Resumaker logo" className={styles.logoBefore} />
                         <Typography variant="h6" component="span" sx={{ fontWeight: 700 }}>
                             <span className={styles.logoPrimary}>Resu</span>
                             <span className={styles.logoSecondary}>maker</span>
                         </Typography>
                     </Box>
                     <Box className={styles.footerLinks}>
-                        <a href="https://github.com/AyeCi/Resumaker" target="_blank" rel="noopener noreferrer">
+                        <a href="https://github.com/ayeci/Resumaker" target="_blank" rel="noopener noreferrer">
                             <FaGithub size={16} />
                             <span>GitHub</span>
                         </a>
-                        <a href="/PRIVACY.md" target="_blank" rel="noopener noreferrer">
+                        <a href="https://github.com/ayeci/Resumaker/blob/main/PRIVACY.md" target="_blank" rel="noopener noreferrer">
                             <Shield size={16} />
                             <span>Privacy Policy</span>
                         </a>
