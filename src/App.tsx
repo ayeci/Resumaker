@@ -52,7 +52,7 @@ function AppContent() {
   const importInputRef = useRef<HTMLInputElement>(null);
 
   // 通知フック
-  const { notify } = useNotification();
+  const { notify, closeNotification } = useNotification();
 
   // OOM（メモリ不足）による強制リロードの検知（生存フラグ方式）
   useEffect(() => {
@@ -162,6 +162,11 @@ function AppContent() {
       document.removeEventListener('touchend', handleTouchEnd);
     };
   }, []);
+
+  // テンプレート変更やモード変更時に通知をクリア
+  useEffect(() => {
+    closeNotification();
+  }, [selectedTemplateId, previewMode, closeNotification]);
 
   // ウィンドウサイズ監視
   useEffect(() => {
@@ -533,7 +538,10 @@ function AppContent() {
         <PortraitUpload variant="tab" />
         <Box
           className={clsx(styles.mobileTabItem, mobileView === 'editor' && styles.active)}
-          onClick={() => setMobileView('editor')}
+          onClick={() => {
+            setMobileView('editor');
+            closeNotification();
+          }}
         >
           <Edit3 size={24} />
           <Typography variant="caption">エディタ</Typography>
@@ -542,6 +550,7 @@ function AppContent() {
           className={clsx(styles.mobileTabItem, mobileView === 'preview' && styles.active)}
           onClick={() => {
             setMobileView('preview');
+            closeNotification();
             // FortuneSheetがdisplay:noneから復帰した際に正しく再描画されるようにリサイズイベントを発火
             setTimeout(() => window.dispatchEvent(new Event('resize')), 10);
           }}

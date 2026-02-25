@@ -20,6 +20,8 @@ export type Message = {
 export interface NotificationContextType {
     /** 通知を追加する（同一IDは上書き） */
     notify: (id: string, severity: Message["severity"], content: string) => void;
+    /** 通知を閉じる（ID指定なしですべて閉じる） */
+    closeNotification: (id?: string) => void;
 }
 
 export const NotificationContext = createContext<NotificationContextType | null>(null);
@@ -53,14 +55,15 @@ export const useNotificationState = () => {
         });
     }, []);
 
-    /** 通知を閉じる */
-    const handleClose = useCallback((id: string) => {
+    /** 通知を閉じる（ID指定がない場合は全て削除） */
+    const closeNotification = useCallback((id?: string) => {
         setNotifications(prev => {
+            if (!id) return new Map(); // 全削除
             const next = new Map(prev);
             next.delete(id);
             return next;
         });
     }, []);
 
-    return { notifications, notify, handleClose };
+    return { notifications, notify, closeNotification };
 };

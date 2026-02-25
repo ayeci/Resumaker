@@ -4,11 +4,12 @@
  * Released under the MIT License.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { renderAsync } from 'docx-preview';
 import type { ResumeConfig, ExportOptions } from '../types/resume';
 import { generateWordBlob } from '../utils/exporter';
 import styles from './WordPreview.module.scss';
+import { useNotification } from './NotificationContext';
 
 interface WordPreviewProps {
     file: File;
@@ -20,7 +21,7 @@ interface WordPreviewProps {
 
 export function WordPreview({ file, resume, options, onSizeChange, setIsLoading }: WordPreviewProps) {
     const containerRef = useRef<HTMLDivElement>(null);
-    const [error, setError] = useState<string | null>(null);
+    const { notify } = useNotification();
 
     // 無限ループ防止用のサイズ記録Refを追加
     const lastSize = useRef({ width: 0, height: 0 });
@@ -61,8 +62,6 @@ export function WordPreview({ file, resume, options, onSizeChange, setIsLoading 
 
         const renderDoc = async () => {
             if (!containerRef.current || !file) return;
-
-            setError(null);
             if (setIsLoading) setIsLoading(true);
             try {
                 // 1. 記入済みのWordドキュメントBlobを生成
@@ -93,7 +92,7 @@ export function WordPreview({ file, resume, options, onSizeChange, setIsLoading 
             } catch (e) {
                 if (isCancelled) return;
                 console.error("Failed to render word preview:", e);
-                setError("Wordプレビューの生成に失敗しました。");
+                notify("word-preview-error", "error", "Wordプレビューの生成に失敗しました。");
             } finally {
                 if (!isCancelled && setIsLoading) {
                     setIsLoading(false);
@@ -106,11 +105,10 @@ export function WordPreview({ file, resume, options, onSizeChange, setIsLoading 
         return () => {
             isCancelled = true;
         };
-    }, [file, resume, options, setIsLoading]);
+    }, [file, resume, options, setIsLoading, notify]);
 
     return (
         <div className={styles.wordPreviewContainer}>
-            {error && <div className={styles.error}>{error}</div>}
             <div
                 ref={containerRef}
                 className={styles.contentContainer}

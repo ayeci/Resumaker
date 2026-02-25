@@ -14,10 +14,10 @@ import { NotificationContext, useNotificationState } from "./NotificationContext
  * アプリケーションのルートで使用する
  */
 export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const { notifications, notify, handleClose } = useNotificationState();
+    const { notifications, notify, closeNotification } = useNotificationState();
 
     return (
-        <NotificationContext.Provider value={{ notify }}>
+        <NotificationContext.Provider value={{ notify, closeNotification }}>
             {children}
             {/* 通知表示エリア */}
             <aside className={styles.notification}>
@@ -25,7 +25,7 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
                     <Alert
                         key={notif.id}
                         severity={notif.severity}
-                        onClose={() => handleClose(notif.id)}
+                        onClose={() => closeNotification(notif.id)}
                         sx={{ mb: 1, boxShadow: 3 }}
                         variant="filled"
                     >
