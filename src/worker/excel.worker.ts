@@ -25,6 +25,90 @@ if (typeof self !== 'undefined' && (self as any).window === undefined) {
     };
 }
 
+/**
+ * FortuneSheet 表示前のシートデータの後処理
+ * 1. 結合セル内部の不要な罫線を除去
+ * 2. テキストのはみ出し（オーバーフロー）設定を修正
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const cleanUpSheetData = (sheets: any[]) => {
+    sheets.forEach((sheet) => {
+
+        // --- 1. 結合セル内の不要な内部罫線を消去 ---
+        if (sheet.config && sheet.config.merge && sheet.config.borderInfo) {
+            const merges = Object.values(sheet.config.merge) as { r: number, c: number, rs: number, cs: number }[];
+
+            sheet.config.borderInfo = sheet.config.borderInfo.map((border: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+                if (border.rangeType === 'cell' && border.value) {
+                    const r = border.value.row_index;
+                    const c = border.value.col_index;
+
+                    let keepL = true, keepR = true, keepT = true, keepB = true;
+
+                    for (const m of merges) {
+                        const { r: mr, c: mc, rs, cs } = m;
+                        if (r >= mr && r < mr + rs && c >= mc && c < mc + cs) {
+                            if (c > mc) keepL = false;
+                            if (c < mc + cs - 1) keepR = false;
+                            if (r > mr) keepT = false;
+                            if (r < mr + rs - 1) keepB = false;
+                        }
+                    }
+
+                    if (!keepL && !keepR && !keepT && !keepB) return null;
+
+                    const newValue = { ...border.value };
+                    if (!keepL) delete newValue.l;
+                    if (!keepR) delete newValue.r;
+                    if (!keepT) delete newValue.t;
+                    if (!keepB) delete newValue.b;
+
+                    return { ...border, value: newValue };
+                }
+                return border;
+            }).filter(Boolean);
+        }
+
+        // --- 2. 究極版：安全なはみ出し処理（見えない壁の完全撤去） ---
+        if (sheet.celldata) {
+            sheet.celldata.forEach((cell: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+                // セルの実体がない場合はスキップ
+                if (!cell || !cell.v || typeof cell.v !== 'object') return;
+
+                const v = cell.v;
+
+                // ① 「折り返し("2")」以外のテキストは全て「はみ出し("1")」を強制
+                // ※ FortuneSheet は tb を 文字列 で比較するため、数値ではなく文字列を設定する
+                if (v.tb !== 2 && v.tb !== '2') {
+                    v.tb = '1';
+                }
+
+                // ② 実データが存在するかどうかをあらゆる角度から厳密に判定
+                const hasRawValue = v.v !== null && v.v !== undefined && v.v !== '';       // 通常の値
+                const hasDisplayValue = v.m !== null && v.m !== undefined && v.m !== '';   // 表示用の値
+                const hasRichText = v.ct && typeof v.ct === 'object' && v.ct.s && Array.isArray(v.ct.s) && v.ct.s.length > 0; // 装飾付きテキスト
+                const hasFormula = !!v.f;    // 数式
+                const hasMerge = !!v.mc;     // 結合情報
+                const hasComment = !!v.ps;   // コメント
+
+                const hasAnyContent = hasRawValue || hasDisplayValue || hasRichText || hasFormula || hasMerge || hasComment;
+
+                if (!hasAnyContent) {
+                    // ③ 実データが何もない場合
+                    // FortuneSheet において単に文字のはみ出しをブロックする「見えない壁」になっているため、
+                    // セルの値オブジェクト自体を null にして物理的に透過させる（罫線は消えない）
+                    cell.v = null;
+                } else {
+                    // ④ データがあるセルでも、白背景なら透明化して隣からの侵入を許容する
+                    if (v.bg === '#ffffff' || v.bg === '#FFFFFF') {
+                        delete v.bg;
+                    }
+                }
+            });
+        }
+    });
+};
+
 self.onmessage = async (e: MessageEvent) => {
     const { type, payload } = e.data;
 
@@ -41,7 +125,12 @@ self.onmessage = async (e: MessageEvent) => {
             // 2. さらに重い処理：FortuneSheet変換
             const result = await transformExcelToFortune(excelFile);
 
-            // ★メモリ対策・描画フリーズ防止：メインスレッドで行っていた XML 解析・印刷範囲設定を Worker 側で行う
+            // 結合セルの内部罫線除去 + テキストはみ出し設定の修正
+            if (result.sheets) {
+                cleanUpSheetData(result.sheets);
+            }
+
+            // メモリ対策・描画フリーズ防止：メインスレッドで行っていた XML 解析・印刷範囲設定を Worker 側で行う
             try {
                 const zip = new PizZip(await excelBlob.arrayBuffer());
                 const workbookXmlStr = zip.file("xl/workbook.xml")?.asText();
