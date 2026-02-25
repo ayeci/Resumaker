@@ -43,7 +43,7 @@ interface ResumeEditorProps {
  * JSON/YAML形式での直接編集、ファイルインポート、証明写真のアップロード機能を提供する
  */
 export const ResumeEditor: React.FC<ResumeEditorProps> = ({ fontSize, setFontSize }) => {
-    const { mode, setMode, rawText, setRawText, parseError, resetToSample, reformat, flushPreview } = useResume();
+    const { mode, setMode, rawText, setRawText, editorVersion, parseError, resetToSample, reformat, flushPreview } = useResume();
 
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
     const [reloadDialogOpen, setReloadDialogOpen] = useState(false);
@@ -58,6 +58,9 @@ export const ResumeEditor: React.FC<ResumeEditorProps> = ({ fontSize, setFontSiz
     // モバイル判定（App.tsx と同期させるために 768px を閾値とする）
     const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
 
+    // Reactの再描画遅延によるMonaco Editorの値巻き戻し＆カーソルジャンプを防ぐためのRef
+    const lastVersion = useRef(editorVersion);
+
     /**
      * エディタの内容が変更された際のハンドラ
      * ユーザー入力による変更のみをContextに反映させる。
@@ -68,7 +71,8 @@ export const ResumeEditor: React.FC<ResumeEditorProps> = ({ fontSize, setFontSiz
         if (event.isFlush) {
             return;
         }
-        setRawText(value || '');
+        const newValue = value || '';
+        setRawText(newValue); // ここでは生テキストのみ更新（editorVersionは変えない）
     };
 
     const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -77,6 +81,28 @@ export const ResumeEditor: React.FC<ResumeEditorProps> = ({ fontSize, setFontSiz
         editorRef.current = editor;
         editorDomRef.current = editor.getDomNode();
     };
+
+    // rawTextが外部（フォーマット、インポート、サンプル等）から変更された場合にのみエディタに反映
+    useEffect(() => {
+        const editor = editorRef.current;
+        if (!editor) return;
+
+        // Context側の `editorVersion` が更新された場合のみエディタテキストを強制上書きする
+        if (editorVersion !== lastVersion.current) {
+            const model = editor.getModel();
+            if (model && rawText !== model.getValue()) {
+                // setValueだとUndo履歴が消えるため、全選択置換のEditOperationとして実行（Undo可能）
+                editor.pushUndoStop();
+                model.pushEditOperations(
+                    [],
+                    [{ range: model.getFullModelRange(), text: rawText }],
+                    () => null
+                );
+                editor.pushUndoStop();
+            }
+            lastVersion.current = editorVersion;
+        }
+    }, [editorVersion, rawText]);
 
     // IME確定・英語Enter・blur時にプレビュー即時更新シグナルを送信
     const flushRef = useRef(flushPreview);
@@ -221,7 +247,7 @@ export const ResumeEditor: React.FC<ResumeEditorProps> = ({ fontSize, setFontSiz
                     height="100%"
                     defaultLanguage="yaml"
                     language={mode}
-                    value={rawText}
+                    defaultValue={rawText}
                     onChange={handleEditorChange}
                     onMount={handleEditorDidMount}
                     options={{

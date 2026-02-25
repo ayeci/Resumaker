@@ -23,8 +23,10 @@ export interface ResumeContextType {
     setResume: (resume: ResumeConfig) => void;
     /** エディタ上の生テキストデータ */
     rawText: string;
-    /** エディタ上の生テキストデータを更新する */
+    /** エディタ上の生テキストデータを更新する（ユーザー入力用） */
     setRawText: (text: string) => void;
+    /** 外部からの更新検知用バージョンカウンター */
+    editorVersion: number;
     /** 現在のエディタモード */
     mode: EditorMode;
     /** エディタモードを変更する */

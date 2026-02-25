@@ -266,6 +266,12 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
     const [exportOptions, setExportOptions] = useState<ExportOptions>(DEFAULT_EXPORT_OPTIONS);
     const [previewMode, setPreviewMode] = useState<'standard' | 'template'>('standard');
     const [portraitFile, setPortraitFileState] = useState<File | null>(null);
+    const [editorVersion, setEditorVersion] = useState<number>(0);
+
+    const updateRawTextExternally = useCallback((text: string) => {
+        setRawText(text);
+        setEditorVersion(v => v + 1);
+    }, []);
 
     useEffect(() => {
         const initTemplateStore = async () => {
@@ -360,7 +366,7 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
         if (typeof data === 'string') {
             const newMode: EditorMode = type === 'auto' ? (data.trim().startsWith('{') ? 'jsonc' : 'yaml') : type;
             setMode(newMode);
-            setRawText(data);
+            updateRawTextExternally(data);
             try {
                 const parsed = newMode === 'jsonc' ? jsonc.parse(data) : yaml.load(data, { schema: yaml.JSON_SCHEMA });
                 if (parsed && typeof parsed === 'object') {
@@ -378,10 +384,10 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
             const portrait = (data as { portrait?: string }).portrait || resume.portrait;
             const merged = { ...normalized, portrait } as ResumeConfig;
             setResumeState(merged);
-            setRawText(serializeResume(merged, mode));
+            updateRawTextExternally(serializeResume(merged, mode));
             setParseError(null);
         }
-    }, [mode, resume.portrait]);
+    }, [mode, resume.portrait, updateRawTextExternally]);
 
     /**
      * テンプレートを1件追加する（既存の同名ファイルは自動的に置換される）
@@ -487,7 +493,7 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
             if (mode === 'jsonc') {
                 // jsonc.format() はコメントを保持したまま整形できる
                 const edits = jsonc.format(rawText, undefined, { tabSize: 2, insertSpaces: true });
-                setRawText(jsonc.applyEdits(rawText, edits));
+                updateRawTextExternally(jsonc.applyEdits(rawText, edits));
             } else {
                 currentData = yaml.load(rawText, { schema: yaml.JSON_SCHEMA });
                 if (currentData) {
@@ -497,7 +503,7 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
                         quotingType: '"',
                         indent: 2
                     });
-                    setRawText(formatted);
+                    updateRawTextExternally(formatted);
                 }
             }
             setParseError(null);
@@ -505,7 +511,7 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
             console.error('Reformat failed:', e);
             setParseError({ message: '整形に失敗しました: ' + (e instanceof Error ? e.message : String(e)) });
         }
-    }, [mode, rawText]);
+    }, [mode, rawText, updateRawTextExternally]);
 
     /**
      * エディタのモード（JSON/YAML）を切り替える
@@ -544,7 +550,7 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
             }
 
             setMode(targetMode);
-            setRawText(newText);
+            updateRawTextExternally(newText);
             setParseError(null);
         } catch (e: unknown) {
             console.error('Mode switch failed:', e);
@@ -552,7 +558,7 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
             // ユーザー体験としては「エラーがあります」と出して切り替えないのが安全。
             setParseError({ message: '構文エラーがあるためモードを切り替えられません: ' + (e instanceof Error ? e.message : String(e)) });
         }
-    }, [mode, rawText, resume.portrait]);
+    }, [mode, rawText, resume.portrait, updateRawTextExternally]);
 
     const handleSetPortraitFile = useCallback((file: File | null) => {
         // 前の Blob URL を解放してメモリを還す
@@ -584,22 +590,23 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
 
                 // 現在のモードに合わせてテキストを設定
                 if (mode === 'jsonc') {
-                    setRawText(JSON.stringify(merged, null, 2));
+                    updateRawTextExternally(JSON.stringify(merged, null, 2));
                 } else {
-                    setRawText(sampleYaml);
+                    updateRawTextExternally(sampleYaml);
                 }
             }
         } catch (e) {
             console.error('Failed to reset to sample:', e);
             setParseError({ message: 'サンプルデータの読み込みに失敗しました' });
         }
-    }, [mode]);
+    }, [mode, updateRawTextExternally]);
 
     const contextValue = useMemo(() => ({
         resume,
         setResume: handleSetResume,
         rawText,
         setRawText: handleSetRawText,
+        editorVersion,
         mode,
         setMode: handleSetMode,
         parseError,
@@ -625,7 +632,7 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
         flushCount
     }), [
         // ステート類
-        resume, rawText, mode, parseError, sourceFormat, templates,
+        resume, rawText, editorVersion, mode, parseError, sourceFormat, templates,
         selectedTemplateId, exportOptions, previewMode, portraitFile, flushCount,
         // useCallback で保護された各関数
         handleSetResume, handleSetRawText, handleSetMode, importData, reformat,
