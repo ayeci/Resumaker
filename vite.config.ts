@@ -36,13 +36,15 @@ export default defineConfig(async () => {
     })
   ];
 
-  // 【裏技】ローカルに basicSsl がインストールされている場合だけ有効化する
+  /*// 【裏技】ローカルに basicSsl がインストールされている場合だけ有効化する
   try {
-    const basicSsl = (await import('@vitejs/plugin-basic-ssl')).default;
+    const basicSslModule = await import('@vitejs/plugin-basic-ssl');
+    const basicSsl = basicSslModule.default;
     plugins.push(basicSsl());
   } catch {
     // インストールされていない環境（GitHub Actionsや他の人のPC）では何もしない
   }
+  //*/
 
   return {
     base: '/Resumaker/',
