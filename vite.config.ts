@@ -1,13 +1,11 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type PluginOption } from 'vite'
 import react from '@vitejs/plugin-react'
-import basicSsl from '@vitejs/plugin-basic-ssl'
 import { VitePWA } from 'vite-plugin-pwa';
 
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [
+export default defineConfig(async () => {
+  const plugins: PluginOption[] = [
     react(),
-    basicSsl(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'web-app-manifest-192x192.png', 'web-app-manifest-512x512.png'],
@@ -36,19 +34,32 @@ export default defineConfig({
         "display": "standalone"
       }
     })
-  ],
-  build: {
-    chunkSizeWarningLimit: 1600,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-          excel: ['xlsx'],
-          pdf: ['pdfjs-dist'],
-          office: ['docxtemplater', 'pizzip', 'mammoth'],
-          ui: ['lucide-react', 'clsx'],
+  ];
+
+  // 【裏技】ローカルに basicSsl がインストールされている場合だけ有効化する
+  try {
+    const basicSsl = (await import('@vitejs/plugin-basic-ssl')).default;
+    plugins.push(basicSsl());
+  } catch {
+    // インストールされていない環境（GitHub Actionsや他の人のPC）では何もしない
+  }
+
+  return {
+    base: '/Resumaker/',
+    plugins: plugins,
+    build: {
+      chunkSizeWarningLimit: 1600,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vendor: ['react', 'react-dom'],
+            excel: ['xlsx'],
+            pdf: ['pdfjs-dist'],
+            office: ['docxtemplater', 'pizzip', 'mammoth'],
+            ui: ['lucide-react', 'clsx'],
+          },
         },
       },
     },
-  },
-})
+  };
+});

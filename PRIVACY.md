@@ -34,9 +34,21 @@ To prevent browser crashes due to memory limitations on mobile devices, uploaded
 - Any encrypted data remaining in the storage becomes mathematically impossible to decrypt, turning into useless random noise. It poses zero risk of data leakage, even on a shared device. The residual data is automatically cleaned up the next time the app is launched.
   ストレージに残された暗号化データは数学的に復元不可能（ただの乱数のゴミ）となるため、共有端末であっても情報漏洩のリスクは一切ありません。残存データは次回のアプリ起動時に自動的にクリーンアップされます。
 
-## 5. Contact (お問い合わせ)
+## 5. PWA & Service Worker Cache (PWAとService Workerキャッシュについて)
+
+Resumaker is a PWA (Progressive Web App). A Service Worker automatically caches the app's static files (HTML, CSS, JavaScript, etc.) to enable offline usage.
+Resumaker はPWA（Progressive Web App）です。Service Worker がアプリの静的ファイル（HTML、CSS、JavaScript等）を自動的にキャッシュし、オフラインでの利用を可能にしています。
+
+- The cache contains **only the application code itself**. Your personal resume data is never written to the Service Worker cache.
+  キャッシュに保存されるのは **アプリケーションのコード（プログラム）のみ** であり、ユーザーの履歴書データがService Workerのキャッシュに書き込まれることは一切ありません。
+- The cache is automatically updated when a new version of the app is deployed.
+  キャッシュはアプリの新しいバージョンがデプロイされた際に自動的に更新されます。
+- You can clear the cache at any time via your browser's settings (Site Settings → Clear Data).
+  キャッシュはブラウザの設定（サイト設定 → データを削除）からいつでも消去できます。
+
+## 6. Contact (お問い合わせ)
 
 If you have any questions about this Privacy Policy, please contact us via the GitHub repository.
 本プライバシーポリシーに関するご質問は、GitHubリポジトリを通じてお問い合わせください。
 
-[https://github.com/AyeCi/Resumaker](https://github.com/AyeCi/Resumaker)
+[https://github.com/ayeci/Resumaker](https://github.com/ayeci/Resumaker)

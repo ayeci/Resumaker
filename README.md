@@ -2,21 +2,33 @@
 
 Created and maintained by ayeci with Antigravity
 
-**Resumaker** は、YAML/JSONファイル形式で記述された履歴書データをもとに、ExcelおよびWord形式の履歴書を生成するアプリケーションです。
-データの管理をテキストベース（YAML or JSON）で行うことで、バージョン管理や修正を容易にし、デザインされたテンプレートへの流し込みを自動化します。
+**Resumaker** は、YAML/JSONC（コメント許容JSON）ファイル形式で記述された履歴書データをもとに、ExcelおよびWord形式の履歴書を生成するPWA（Progressive Web App）です。
+データの管理をテキストベース（YAML or JSONC）で行うことで、バージョン管理や修正を容易にし、デザインされたテンプレートへの流し込みを自動化します。
 
-## 特徴
+## 🚀 使用方法
 
-- **YAML/JSONによるデータ管理**: 履歴書の情報を可読性の高いYAML形式で記述します。
+**アプリURL:** [https://ayeci.github.io/resumaker/](https://ayeci.github.io/resumaker/)
+
+ブラウザから上記URLにアクセスするだけで、すぐにご利用いただけます。
+また、PWA（Progressive Web App）に対応しているため、PCやスマートフォンのブラウザメニューから「ホーム画面に追加（アプリをインストール）」することで、ネイティブアプリのようにオフラインでもサクサク動作します。  
+リポジトリからソースをダウンロードして、ローカル環境で実行することも可能です。（その場合は、`npm install` で必要なパッケージをインストールしてください。）
+
+## ✨ 特徴
+
+- **YAML/JSONC（コメント許容JSON）によるデータ管理**: 履歴書の情報を可読性の高いYAML形式、またはコメント付きJSON（JSONC）形式で記述します。
+- **Excel / Word プレビュー機能**: 編集内容を確認しながら作業可能（ファイルアップロードでの読み込みにも対応）。  
+  モバイル環境では最大5件まで、PCなら無制限にテンプレートを登録し、簡易的なプレビューが可能です。  
+  （ただしライブラリの都合上、かなりレイアウトが崩れる場合があります。最終的にはエクスポートしたファイルで確認するのがベターです。）
 - **Excelエクスポート**: 既存のExcelテンプレート（JIS規格等）のレイアウトやスタイル（結合セル、フォント、罫線など）を維持したままデータを出力します。
   - 学歴・職歴欄の統合処理（`history`）
   - 「現在に至る」「以上」などの自動追記、数式内の数値置換対応
 - **Wordエクスポート**: Wordテンプレート（Docxtemplater）へのデータ流し込みに対応。
 - **プライバシー重視**: クライアントサイド（ブラウザ）完結で動作するため、個人データが外部サーバーに送信されることはありません。
+- **PWA対応**: インストール可能なProgressive Web Appとして動作し、オフラインでも利用可能です。
 - **リアルタイムプレビュー**: 編集内容を確認しながら作業可能（ファイルアップロードでの読み込みにも対応）。
 - **PDF保存・印刷**: ブラウザ標準の印刷機能を使用して、プレビュー通りの高品質なPDF保存や印刷が可能です。
 
-## セキュリティとプライバシー
+## 🔒 セキュリティとプライバシー
 
 Resumaker は「クライアントサイド完結型」のアプリケーションです。ユーザーのプライバシーを最優先に設計されています。
 
@@ -32,45 +44,15 @@ Resumaker は「クライアントサイド完結型」のアプリケーショ�
 - **トラッキングなし**: Cookie や Google Analytics 等の解析ツールは一切使用していません。
 - **詳細**: [プライバシーポリシー](./PRIVACY.md) を参照してください。
 
-## 技術スタック
-
-- **Core**:
-  - React 19
-  - TypeScript
-  - Vite 7
-- **UI Framework**:
-  - Material UI (MUI) v7
-- **Styling**:
-  - Sass (Dart Sass) / SCSS Modules
-  - Emotion
-- **Data Import (読込)**:
-  - Excel/Text: xlsx (SheetJS)
-  - Word: Mammoth
-  - PDF: pdfjs-dist
-- **Export (出力)**:
-  - Excel: PizZip (XML直接操作)
-  - Word: Docxtemplater, PizZip, docxtemplater-image-module-free
-- **Preview (プレビュー)**:
-  - Excel: FortuneSheet
-  - Word: docx-preview
-- **Data Format**:
-  - YAML (js-yaml)
-  - JSON
-- **YAML / JSON Editor**:
-  - Monaco Editor
-- **Icons**:
-  - Lucide React
-
-## テンプレートについて
+## 📝 テンプレート作成ガイド
 
 本アプリに含まれているテンプレートは、あくまで動作確認用の「最小限のサンプル」です。  
-実用的な履歴書を作成する場合は、ご自身でテンプレートを用意することを強く推奨します。  
-（マーカー埋め込み済みのテンプレートは著作権の関係で公開できないです。すみません……）
+実用的な履歴書を作成する場合は、ご自身でテンプレートを用意することを強く推奨します。
 
-- **公式様式**: [厚生労働省の履歴書様式例](https://www.hellowork.mhlw.go.jp/member/career_doc01.html) などからExcelファイルをダウンロードしてください。
-- **作成方法**: ダウンロードしたファイルに、以下のガイドに従ってマーカー（例: `{name}`）を書き込むことで、あなた専用のテンプレートを作成できます。
+> **Note:** 著作権の関係上、実用的なマーカー埋め込み済みのテンプレートは同梱していません。
 
-## テンプレート作成ガイド
+- [厚生労働省の履歴書様式例](https://www.hellowork.mhlw.go.jp/member/career_doc01.html) などお好みのテンプレートをダウンロードしてください。
+- ダウンロードしたファイルに、以下のガイドに従ってマーカー（例: `{name}`）を書き込むことで、あなた専用のテンプレートを作成できます。
 
 ### 1. 単一の値（Placeholders）
 
@@ -95,28 +77,27 @@ YAML/JSONデータのキーに対応する値を埋め込みます。(サンプ�
 
 - **カスタム日付**: 日付項目は `{dob "yyyy/MM/dd"}` のようにダブルクォーテーションで囲んでフォーマットを指定できます。
 
-### 2. リストデータ（Loops）
+### 2. リストデータ
 
 「学歴（`education`）・職歴（`work_experience`）」および「免許・資格（`certificate`）」は自動的にリストとして処理されます。  
 「学歴」と「職歴」は`history`にまとめて出力することも可能です。  
 リストの項目は、リストの開始行から終了行までのすべての行を`{key[index].property_name}`のフォーマットのマーカーで埋めることで、自動的に先頭から値を埋め込むことが可能です。
-例えば履歴書の学歴・職歴欄のように記入するブロックが離れていても index を参照して自動的にブロックを移りながら埋め込みます。  
-
-#### Wordテンプレート
-
-Docxtemplaterの標準記法を使用します。
-
-- **学歴・職歴（統合）**: `{#history} ... {/history}`
-- **免許・資格**: `{#certificate} ... {/certificate}`
-- 内部では `year`, `month`, `content` フィールドが使用可能です。
-
-#### Excelテンプレート
+例えば履歴書の学歴・職歴欄のように記入するブロックが離れていても index を参照して自動的にブロックを移りながら埋め込みます。
 
 テンプレートにあらかじめ用意されたセルにインデックスを指定して埋め込む形式です。
 
 - **書式**: `{listName[index].propertyName}`
 - **例**: `{history[0].year}`, `{history[1].content}`, `{certificate[0].year}`
 - **インデックスなし**: `{listName.propertyName}` と書くと、自動的に 0 番目の要素が参照されます。
+
+くわしくは `example/sample.xlsx` を参照してください。
+
+## 履歴データ作成ガイド
+
+`resume.yaml` を作成します。  
+くわしくは `example/sample.yaml` を参照してください。
+
+- 写真（`portrait`）は、Shapeの名前や代替テキストに `{portrait}` と記述された箇所に挿入されます。
 
 #### リストの仕様
 
@@ -434,29 +415,7 @@ work_experience:
   </tbody>
 </table>
 
-## 使用方法
-
-### 1. インストール・起動
-
-```bash
-npm install
-npm run dev
-```
-
-#### その他のコマンド
-
-- `npm run build`: 本番用ビルドを作成します。
-- `npm run preview`: ビルドしたアプリケーションをプレビューします。
-- `npm run lint`: コードの静的解析を実行します。
-
-### 2. データの準備
-
-`resume.yaml` を作成します。（サンプル: `example/sample.yaml`）
-
-- 例えば、Excelテンプレートでの数式利用時、数式内の数値（例：`IF(A1=1, "有", "無")` の `1`）をマーカーで置換することも可能です。
-- 写真（`portrait`）は、Shapeの名前や代替テキストに `{portrait}` と記述された箇所に挿入されます。
-
-## 既知の問題 (プレビュー機能)
+## ⚠️既知の問題 (プレビュー機能制限)
 
 プレビュー機能には、使用しているライブラリの仕様により以下の制限があります。これらは**プレビュー表示上の問題であり、エクスポートされたファイルには影響しません**。
 
@@ -474,16 +433,130 @@ npm run dev
 - **画像位置**: 証明写真の位置やサイズがずれて表示されることがあります。
 - **フォント**: エクスポート結果と異なるフォントで表示される場合があります。
 
-※ いずれの形式においても、エクスポートではXMLを直接操作しているため、結合セルや画像位置などは正しく出力されます。
+> **※ いずれの形式においても、エクスポートではXMLを直接操作しているため、結合セルや画像位置などは正しく出力されます。**
 
-## ここがつらかったなって点
+## 😞 ここがつらかったなって点
 
-- **モバイル対応**: Out Of Memmory / Android OSによるChromeプロセスの強制剥奪 など、いろいろな要素で問答無用でかってにリロードが走るのを止められない点。
-- **Excelプレビュー**: FortuneSheetを採用したけれど、それまでにいろいろなライブラリを試しては再現性で没になり、を繰り返した。本命はOffice Embeddedによる埋め込みなんだけど、OneDriveにファイルが保存されていることとか、編集が困難とかの課題がある。完全ローカル駆動の要件からも外れるし。
-- **ファイル出力**: プレビューと関連するけど、どうにもライブラリ経由だとファイルレイアウトが崩れる問題が多発。最終的にはXMLを直接操作する方向に落ち着いた。けど黒魔術のような正規表現の実装やノード操作ロジックの作成は、生成AIがなければ実装困難だった。（その分レビューが大変なんだけど）
-- **生成AIの制御**: Geminiが何度言っても実行計画を英語で出してくるとか、実行計画を出さずにいきなりコードを書き換え始めるとかの問題が多発。制御が難しかった。あとクォータがすぐに枯渇して作業が滞る問題。モデルの切り替えや、ブラウザでの対話などを織り交ぜて分散させることで継続した。
+### 1. モバイル対応
 
-## ライセンス
+Out Of Memory / Android OSによるChromeプロセスの強制剥奪 など、いろいろな要素で問答無用で勝手にリロードが走るのを止められない点。  
+メモリサイズを疑い、テンプレートデータをIndexedDBに逃がす対応を入れたものの解消せず、右往左往。  
+最終的にviteのオーバーヘッドを解消（npm run dev をやめて build してプレビュー）することで実用レベルに。  
+そんなことかい！と盛大に突っ込みを入れる。  
+紆余曲折の末、結果としてPCはIndexedDB使用、Web Crypto API (AES-GCM) を使った揮発性暗号化でセキュリティリスクを回避、モバイルはインメモリで完結する方向に落ち着いた。  
 
-本プロジェクトは [MIT License](./LICENSE.md) のもとで公開されています。
+### 2. Excelプレビュー
+
+FortuneSheetを採用したけれど、それまでにいろいろなライブラリを試しては再現性で没になり、を繰り返した。  
+本命はOffice Embeddedによる埋め込みなんだけど、OneDriveにファイルが保存されていることとか、編集が困難とかの課題がある。完全ローカル駆動の要件からも外れるし。  
+マーカーの置換等はXMLを直接編集してからライブラリに渡すことで対応。  
+隣のセルが空なのに文字がはみ出さず（オーバーフローせず）に途切れてしまう： ライブラリ側が v.tb を文字列"1"で比較で比較していたところ、数値1を設定していたことで泥沼に。
+
+### 3. ファイル出力
+
+プレビューと関連するけど、どうにもライブラリ経由だとファイルレイアウトが崩れる問題が多発。最終的にはXMLを直接操作する方向に落ち着いた。  
+黒魔術のような正規表現の実装やノード操作ロジックの作成は、生成AIがなければ実装困難だった。（その分レビューが大変なんだけど）
+
+### 4. 生成AIの制御
+
+Geminiが何度言っても実行計画を英語で出してくるとか、実行計画を出さずにいきなりコードを書き換え始めるとかの問題が多発。制御が難しかった。  
+クォータがすぐに枯渇して作業が滞る問題。モデルの切り替えや、ブラウザでの対話などを織り交ぜて分散させることで継続した。  
+深く思考させるべきところ、単純で高速な回答を要求すべきところ、モデルごとの適正を見極めて使い分けるのが難しかった。  
+
+#### Antigravity
+
+##### Claude Opus 4.6
+
+日本語能力、分析能力、コード生成能力、すべてにおいて頭一つ抜けている印象。  
+
+##### Gemini 3(.1) Pro
+
+日本語能力は高いものの、コード生成能力はClaude Opus 4.6に劣る。  
+しょっちゅう自分の書いたコードを信頼しすぎて、違和感を指摘しても全然関係ないところを修正しようとする印象。  
+実行計画を出さずにそのままコード書き換え始めたり、リファクタリングお願いしたのに勝手にUIをいじって全然違う見た目にしてくれちゃったりとじゃじゃ馬だった。  
+ただしラフな指示でも意図を汲み取ってくれる能力は優秀で、ほかのLLMに渡すプロンプトを生成するのに向いている印象。
+
+#### Codex
+
+##### GPT-5.3-Codex
+
+めちゃくちゃ早い。全体を横断した検索とかこういうパターンの箇所探して、とかの指示に強い。
+
+#### GitHub Copilot
+
+コード補間が強すぎて、書きたいことを先回りして書いてくれる半面、補間が強すぎるのとTabを奪われるのがストレス。  
+でももうこれなしではいられない体に変えられてしまった。  
+手打ちしていると秒間当たりのコーディング量が如実に落ちて、パフォーマンスの差を感じすぎる。  
+人間は弱い。
+
+## 🛠 技術スタック
+
+- **Core**: React 19 / TypeScript / Vite 7
+- **UI & Styling**: Material UI (MUI) v7 / Base UI / Emotion / Sass (SCSS Modules)
+- **Data Import**: xlsx (SheetJS) / Mammoth / pdfjs-dist
+- **Export (XML Direct Manipulation)**: PizZip / Docxtemplater / docxtemplater-image-module-free
+- **Preview**: FortuneSheet / docx-preview
+- **Editor**: Monaco Editor / monaco-yaml / jsonc-parser / js-yaml
+- **Others**: vite-plugin-pwa (Workbox) / @use-gesture/react / Lucide React
+
+## OSS Licenses
+
+本プロジェクトが直接依存するパッケージとそのライセンス一覧です。
+
+### Dependencies
+
+| パッケージ | ライセンス |
+| :--- | :--- |
+| @base-ui/react | MIT |
+| @emotion/react | MIT |
+| @emotion/styled | MIT |
+| @fortune-sheet/react | MIT |
+| @monaco-editor/react | MIT |
+| @mui/icons-material | MIT |
+| @mui/material | MIT |
+| @use-gesture/react | MIT |
+| @zenmrp/fortune-sheet-excel | MIT |
+| clsx | MIT |
+| docx-preview | Apache-2.0 |
+| docxtemplater | MIT |
+| docxtemplater-image-module-free | MIT |
+| file-saver | MIT |
+| js-yaml | MIT |
+| jsonc-parser | MIT |
+| lucide-react | ISC |
+| mammoth | BSD-2-Clause |
+| monaco-editor | MIT |
+| monaco-yaml | MIT |
+| pdfjs-dist | Apache-2.0 |
+| pizzip | MIT OR GPL-3.0 |
+| react | MIT |
+| react-dom | MIT |
+| react-icons | MIT |
+| xlsx | Apache-2.0 |
+
+### DevDependencies
+
+| パッケージ | ライセンス |
+| :--- | :--- |
+| @eslint/js | MIT |
+| @types/file-saver | MIT |
+| @types/js-yaml | MIT |
+| @types/node | MIT |
+| @types/react | MIT |
+| @types/react-dom | MIT |
+| @vitejs/plugin-basic-ssl | MIT |
+| @vitejs/plugin-react | MIT |
+| eslint | MIT |
+| eslint-plugin-react-hooks | MIT |
+| eslint-plugin-react-refresh | MIT |
+| globals | MIT |
+| sass | MIT |
+| typescript | Apache-2.0 |
+| typescript-eslint | MIT |
+| vite | MIT |
+| vite-plugin-pwa | MIT |
+
+## Licenses
+
+本プロジェクトは [MIT License](./LICENSE.md) のもとで公開されています。  
 Copyright (c) 2026 ayeci
