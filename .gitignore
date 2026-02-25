@@ -38,3 +38,12 @@ lint_log.txt
 # sample files
 example/*
 !example/sample*
+
+# scripts and temporary debug outputs
+*.cjs
+*.txt
+!CMakeLists.txt
+!robots.txt
+# root js scripts (if any)
+/*.js
+!eslint.config.js
