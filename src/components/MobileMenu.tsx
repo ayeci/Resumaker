@@ -8,7 +8,7 @@ import React, { useEffect } from 'react';
 
 import NumberSpinner from './NumberSpinner';
 import { Box, Typography, IconButton, Checkbox, Divider } from '@mui/material';
-import { X, Printer, Download, LayoutTemplate, Upload, Settings, Shield, AlignLeft, FileSymlink, Type } from 'lucide-react';
+import { X, Printer, Download, LayoutTemplate, Upload, Settings, Shield, AlignLeft, FileSymlink, Type, Trash2 } from 'lucide-react';
 import { FaGithub } from "react-icons/fa";
 import { useResume } from '../context/ResumeHooks';
 import { ToggleButton, ToggleButtonGroup } from '@mui/material';
@@ -39,6 +39,9 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
     const {
         templates,
         toggleTemplateCheck,
+        setSelectedTemplateId,
+        setPreviewMode,
+        removeTemplate,
         mode,
         setMode,
         reformat,
@@ -113,7 +116,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                     {/* 4. データ読込 */}
                     <Box className={styles.menuItem} onClick={() => { onImport(); onClose(); }}>
                         <Upload size={20} />
-                        <Typography className={styles.menuLabel}>データ読込</Typography>
+                        <Typography className={styles.menuLabel}>履歴データを開く</Typography>
                     </Box>
 
                     {/* 5. サンプルデータ再読込 */}
@@ -126,7 +129,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                     <Divider className={styles.divider} />
                     <Box className={styles.menuItem} onClick={() => { onLoadTemplate(); onClose(); }}>
                         <LayoutTemplate size={20} />
-                        <Typography className={styles.menuLabel}>テンプレート読込</Typography>
+                        <Typography className={styles.menuLabel}>テンプレートを開く</Typography>
                     </Box>
 
                     {/* 7. 設定・表示切り替え（オプション系） */}
@@ -148,13 +151,9 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                         <Download size={20} />
                         <Typography className={styles.menuLabel}>テンプレート形式で保存</Typography>
                     </Box>
-                    <Box className={styles.menuItem} onClick={() => { onExport('yaml'); onClose(); }}>
+                    <Box className={styles.menuItem} onClick={() => { onExport(mode); onClose(); }}>
                         <Download size={20} />
-                        <Typography className={styles.menuLabel}>YAMLで保存</Typography>
-                    </Box>
-                    <Box className={styles.menuItem} onClick={() => { onExport('json'); onClose(); }}>
-                        <Download size={20} />
-                        <Typography className={styles.menuLabel}>JSONで保存</Typography>
+                        <Typography className={styles.menuLabel}>履歴データを保存</Typography>
                     </Box>
                 </Box>
 
@@ -163,12 +162,40 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                 {/* 9. 各テンプレートの表示・出力切り替え */}
                 <Box className={styles.menuGroup}>
                     <Typography variant="caption" sx={{ px: 2, py: 1, display: 'block', color: '#6b7280', fontWeight: 600 }}>
-                        保存対象のテンプレート選択
+                        テンプレート選択
                     </Typography>
                     {templates && templates.length > 0 ? templates.map((t) => (
-                        <Box key={t.id} className={styles.menuItem} onClick={() => toggleTemplateCheck(t.id)}>
-                            <Checkbox checked={t.checked} size="small" className={styles.checkbox} />
-                            <Typography className={styles.menuLabel} sx={{ color: '#374151' }}>{t.name}</Typography>
+                        <Box key={t.id} className={styles.menuItem} sx={{ pr: 1 }}>
+                            <Checkbox
+                                checked={t.checked}
+                                size="small"
+                                className={styles.checkbox}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleTemplateCheck(t.id);
+                                }}
+                            />
+                            <Typography
+                                className={styles.menuLabel}
+                                sx={{ color: '#374151', flexGrow: 1, cursor: 'pointer' }}
+                                onClick={() => {
+                                    setSelectedTemplateId(t.id);
+                                    setPreviewMode('template');
+                                    onClose();
+                                }}
+                            >
+                                {t.name}
+                            </Typography>
+                            <IconButton
+                                size="small"
+                                color="error"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    removeTemplate(t.id);
+                                }}
+                            >
+                                <Trash2 size={18} />
+                            </IconButton>
                         </Box>
                     )) : (
                         <Typography variant="body2" sx={{ px: 2, py: 1, color: '#9ca3af', fontStyle: 'italic' }}>

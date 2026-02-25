@@ -20,11 +20,12 @@ import {
     Button
 } from '@mui/material';
 import {
-    FileCode,
     AlignLeft,
     FileSymlink,
-    Type
+    Type,
+    Download
 } from 'lucide-react';
+import { saveAs } from 'file-saver';
 import { useResume } from '../context/ResumeHooks';
 import { PortraitUpload } from './PortraitUpload';
 import styles from './Editor.module.scss';
@@ -135,48 +136,70 @@ export const ResumeEditor: React.FC<ResumeEditorProps> = ({ fontSize, setFontSiz
         setTimeout(() => setStatusMessage(null), 2000);
     };
 
+    /**
+     * 現在のエディタの内容をそのままファイルとして保存する
+     */
+    const handleSaveRaw = (format: 'yaml' | 'json') => {
+        const blob = new Blob([rawText], { type: 'text/plain;charset=utf-8' });
+        saveAs(blob, `resume.${format}`);
+        setStatusMessage(`${format.toUpperCase()}保存完了`);
+        setTimeout(() => setStatusMessage(null), 2000);
+    };
+
     return (
         <Box className={styles.editorRoot}>
             {!isMobile && (
                 <Box className={styles.editorToolbar}>
-                    <Box className={styles.editorLabelSection}>
-                        <FileCode size={18} color="#64748b" />
-                        <ToggleButtonGroup
-                            value={mode}
-                            exclusive
-                            onChange={(_, newMode) => newMode && setMode(newMode)}
-                            size="small"
-                            sx={{ height: 24, ml: 1 }}
-                        >
-                            <ToggleButton value="yaml" sx={{ fontSize: 10, px: 1 }}>YAML</ToggleButton>
-                            <ToggleButton value="json" sx={{ fontSize: 10, px: 1 }}>JSON</ToggleButton>
-                        </ToggleButtonGroup>
-                    </Box>
-                    <Box className={styles.editorFontSize}>
-                        <Type size={18} color="#64748b" />
-                        <NumberSpinner
-                            className={styles.editorFontSizeSpinner}
-                            value={fontSize}
-                            onValueChange={(val) => {
-                                if (val !== null) setFontSize(val);
-                            }}
-                            min={10}
-                            max={30}
-                            step={1}
-                            size="small"
-                            aria-label="文字サイズ"
-                        />
-                    </Box>
+                    <Tooltip title="モード切替（YAML/JSONを自動変換します）" arrow>
+                        <Box className={styles.editorLabelSection}>
+                            <ToggleButtonGroup
+                                value={mode}
+                                exclusive
+                                onChange={(_, newMode) => newMode && setMode(newMode)}
+                                size="small"
+                                sx={{ height: 24, ml: 1 }}
+                            >
+                                <ToggleButton value="yaml" sx={{ fontSize: 10, px: 1 }}>YAML</ToggleButton>
+                                <ToggleButton value="json" sx={{ fontSize: 10, px: 1 }}>JSON</ToggleButton>
+                            </ToggleButtonGroup>
+                        </Box>
+                    </Tooltip>
+                    <Tooltip title="フォントサイズ変更" arrow>
+                        <Box className={styles.editorFontSize}>
+                            <Type size={18} color="#64748b" />
+                            <NumberSpinner
+                                className={styles.editorFontSizeSpinner}
+                                value={fontSize}
+                                onValueChange={(val) => {
+                                    if (val !== null) setFontSize(val);
+                                }}
+                                min={10}
+                                max={30}
+                                step={1}
+                                size="small"
+                                aria-label="文字サイズ"
+                            />
+                        </Box>
+                    </Tooltip>
                     <Box className={styles.toolbarActions}>
-                        <Tooltip title="データ整形">
+                        <Tooltip title="データ整形" arrow>
                             <IconButton size="small" onClick={handleFormat} className={styles.toolbarIconBtn}>
                                 <AlignLeft size={18} />
                             </IconButton>
                         </Tooltip>
                         <PortraitUpload variant="icon" />
-                        <Tooltip title="サンプルデータ再読込">
+                        <Tooltip title="サンプルデータ再読込" arrow>
                             <IconButton size="small" onClick={handleReloadClick} className={styles.toolbarIconBtn}>
                                 <FileSymlink size={18} />
+                            </IconButton>
+                        </Tooltip>
+                        <Tooltip title={`${mode.toUpperCase()}形式で保存`} arrow>
+                            <IconButton
+                                size="small"
+                                onClick={() => handleSaveRaw(mode)}
+                                className={styles.toolbarIconBtn}
+                            >
+                                <Download size={18} />
                             </IconButton>
                         </Tooltip>
                     </Box>

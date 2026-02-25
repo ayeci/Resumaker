@@ -69,6 +69,7 @@ const prepareResumeForEditor = (resume: ResumeConfig): RecursivePartial<ResumeCo
                     return itemRest;
                 }
                 return item;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
             }) as any; // HistoryItemのID削除後の一時的な型不整合を許容
         }
     });
@@ -291,9 +292,28 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
 
     const removeTemplate = useCallback(async (id: string) => {
         await templateFileStore.delete(id);
-        setTemplates(prev => prev.filter(t => t.id !== id));
-        if (selectedTemplateId === id) setSelectedTemplateId(null);
-    }, [selectedTemplateId]);
+
+        setTemplates(prev => {
+            const index = prev.findIndex(t => t.id === id);
+            if (index === -1) return prev;
+
+            const nextTemplates = prev.filter(t => t.id !== id);
+
+            // 削除対象が現在選択中だった場合の切り替えロジック
+            if (selectedTemplateId === id) {
+                if (nextTemplates.length === 0) {
+                    // 全て消えた
+                    setSelectedTemplateId(null);
+                    setPreviewMode('standard');
+                } else {
+                    // インデックスを維持しようとする（後ろがあれば後ろ、なければ最後）
+                    const nextSelectIndex = index < nextTemplates.length ? index : nextTemplates.length - 1;
+                    setSelectedTemplateId(nextTemplates[nextSelectIndex].id);
+                }
+            }
+            return nextTemplates;
+        });
+    }, [selectedTemplateId, setPreviewMode]);
 
     const toggleTemplateCheck = useCallback((id: string) => {
         setTemplates(prev => {

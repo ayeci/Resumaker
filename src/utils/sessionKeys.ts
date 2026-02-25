@@ -13,4 +13,6 @@ export const SESSION_KEYS = {
     PICKING_FILE: 'resumaker_picking_file',
     /** ユーザーの意図的なリロード・ページ遷移検知フラグ */
     INTENTIONAL_RELOAD: 'resumaker_intentional_reload',
+    /** ページが正常に動作中であることを示す生存フラグ */
+    ALIVE: 'resumaker_alive',
 } as const;

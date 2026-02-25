@@ -5,8 +5,8 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { Box, AppBar, Toolbar, Typography, Button, IconButton, ToggleButton, ToggleButtonGroup, CircularProgress, Menu, MenuItem, ButtonGroup, Checkbox, ListItemText, ListItemIcon, Divider } from '@mui/material';
-import { Settings, Printer, ChevronLeft, ChevronRight, FileText, LayoutTemplate, FileUp, Upload, ChevronDown, Eye, EyeOff, Shield, Menu as MenuIcon, Edit3 } from 'lucide-react';
+import { Box, AppBar, Toolbar, Typography, Button, IconButton, ToggleButton, ToggleButtonGroup, CircularProgress, Menu, MenuItem, ButtonGroup, Checkbox, ListItemText, ListItemIcon, Divider, Tooltip } from '@mui/material';
+import { Settings, Printer, ChevronLeft, ChevronRight, FileText, LayoutTemplate, FileUp, Upload, Download, ChevronDown, Eye, EyeOff, Shield, Menu as MenuIcon, Edit3, Trash2 } from 'lucide-react';
 import { FaGithub } from "react-icons/fa";
 import { ResumeEditor } from './components/Editor';
 import { Preview } from './components/Preview';
@@ -17,7 +17,6 @@ import { MobileMenu } from './components/MobileMenu';
 import { PortraitUpload } from './components/PortraitUpload';
 import styles from './App.module.scss';
 import clsx from 'clsx';
-import { dump } from 'js-yaml';
 import PizZip from 'pizzip';
 import { saveAs } from 'file-saver';
 import { NotificationProvider } from './components/Notification';
@@ -32,7 +31,7 @@ const MAX_TEMPLATES = 5;
  * レイアウトの構築、モード切り替え、エクスポート機能の呼び出しを行う
  */
 function AppContent() {
-  const { resume, templates, addTemplates, selectedTemplateId, setSelectedTemplateId, previewMode, setPreviewMode, exportOptions, importData, toggleTemplateCheck } = useResume();
+  const { resume, templates, addTemplates, removeTemplate, selectedTemplateId, setSelectedTemplateId, previewMode, setPreviewMode, exportOptions, importData, toggleTemplateCheck, rawText } = useResume();
 
 
 
@@ -55,15 +54,17 @@ function AppContent() {
   // 通知フック
   const { notify } = useNotification();
 
-  // OOM（メモリ不足）による強制リロードの検知
+  // OOM（メモリ不足）による強制リロードの検知（生存フラグ方式）
   useEffect(() => {
+    const aliveFlag = sessionStorage.getItem(SESSION_KEYS.ALIVE);
     const heavyTaskFlag = sessionStorage.getItem(SESSION_KEYS.HEAVY_TASK);
     const bgKillFlag = sessionStorage.getItem(SESSION_KEYS.BG_KILL);
     const pickingFileFlag = sessionStorage.getItem(SESSION_KEYS.PICKING_FILE);
     const intentionalReloadFlag = sessionStorage.getItem(SESSION_KEYS.INTENTIONAL_RELOAD);
 
-    // 意図的なリロード（F5など）の場合は、クラッシュ警告を出さない
-    if (!intentionalReloadFlag) {
+    // ALIVEフラグが残っている = 前回のセッションが正常終了していない
+    // かつ、意図的なリロードでもない場合のみクラッシュと判定
+    if (aliveFlag && !intentionalReloadFlag) {
       if (heavyTaskFlag) {
         notify("crash-detected", "error", "プレビュー処理中にメモリ限界に達したため、画面が再読み込みされました。");
       } else if (pickingFileFlag) {
@@ -78,6 +79,9 @@ function AppContent() {
     sessionStorage.removeItem(SESSION_KEYS.BG_KILL);
     sessionStorage.removeItem(SESSION_KEYS.PICKING_FILE);
     sessionStorage.removeItem(SESSION_KEYS.INTENTIONAL_RELOAD);
+
+    // 生存フラグをセット（次回起動時の判定に使用）
+    sessionStorage.setItem(SESSION_KEYS.ALIVE, 'true');
 
     // --- バックグラウンド・リロード・遷移の検知 ---
     const handleVisibilityChange = () => {
@@ -105,12 +109,19 @@ function AppContent() {
       }
     };
 
+    const handlePopState = () => {
+      // 戻る/進むボタンでの遷移も意図的な離脱として扱う（将来のルーティング対応）
+      sessionStorage.setItem(SESSION_KEYS.INTENTIONAL_RELOAD, 'true');
+    };
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('popstate', handlePopState);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('popstate', handlePopState);
     };
   }, [notify]);
 
@@ -254,8 +265,7 @@ function AppContent() {
     }
 
     if (format === 'json' || format === 'yaml') {
-      const data = format === 'json' ? JSON.stringify(resume, null, 2) : dump(resume);
-      const blob = new Blob([data], { type: 'text/plain' });
+      const blob = new Blob([rawText], { type: 'text/plain;charset=utf-8' });
       saveAs(blob, `resume.${format}`);
     }
   };
@@ -279,33 +289,32 @@ function AppContent() {
   };
 
   return (
-    <NotificationProvider>
-      <Box className={styles.appContainer}>
+    <Box className={styles.appContainer}>
+      <AppBar position="static" color="default" elevation={1} className={clsx(styles.appHeader, "print-hidden")}>
+        <Toolbar className={styles.headerToolbar}>
+          <Box className={styles.headerLogoSection}>
+            <img src="/favicon.svg" title="Resumaker" alt="Resumaker" className={styles.logoBefore} />
+            <Typography variant="h6" component="div" sx={{ fontWeight: 700 }}>
+              <span className={styles.logoTextBefore}>Resu</span>
+              <span className={styles.logoTextAfter}>maker</span>
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            <ToggleButton
+              value="source"
+              selected={showSource}
+              onChange={() => setShowSource(!showSource)}
+              size="small"
+              sx={{ border: 'none', minWidth: '40px', height: '36.5px' }}
+            >
+              {showSource ? <Eye size={20} /> : <EyeOff size={20} />}
+            </ToggleButton>
 
-        <AppBar position="static" color="default" elevation={1} className={clsx(styles.appHeader, "print-hidden")}>
-          <Toolbar className={styles.headerToolbar}>
-            <Box className={styles.headerLogoSection}>
-              <img src="/favicon.svg" title="Resumaker" alt="Resumaker" className={styles.logoBefore} />
-              <Typography variant="h6" component="div" sx={{ fontWeight: 700 }}>
-                <span className={styles.logoTextBefore}>Resu</span>
-                <span className={styles.logoTextAfter}>maker</span>
-              </Typography>
-            </Box>
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-              <ToggleButton
-                value="source"
-                selected={showSource}
-                onChange={() => setShowSource(!showSource)}
-                size="small"
-                sx={{ border: 'none', minWidth: '40px', height: '36.5px' }}
-              >
-                {showSource ? <Eye size={20} /> : <EyeOff size={20} />}
-              </ToggleButton>
+            <IconButton onClick={() => setOptionDialogOpen(true)} size="small" sx={{ height: '36.5px', width: '36.5px' }}>
+              <Settings size={20} />
+            </IconButton>
 
-              <IconButton onClick={() => setOptionDialogOpen(true)} size="small" sx={{ height: '36.5px', width: '36.5px' }}>
-                <Settings size={20} />
-              </IconButton>
-
+            <Tooltip title="YAML/JSON形式の履歴データを読み込みます" arrow>
               <Button
                 variant="outlined"
                 size="small"
@@ -313,9 +322,11 @@ function AppContent() {
                 onClick={() => importInputRef.current?.click()}
                 sx={{ height: '36.5px' }}
               >
-                データ読込
+                履歴データを開く
               </Button>
+            </Tooltip>
 
+            <Tooltip title="DOCX/XLSX形式のテンプレートを読み込みます" arrow>
               <Button
                 variant="outlined"
                 size="small"
@@ -324,238 +335,322 @@ function AppContent() {
                 onClick={(e) => templates.length === 0 ? handleLoadNewTemplate() : handleTemplateMenuOpen(e)}
                 sx={{ height: '36.5px' }}
               >
-                テンプレート読込
+                テンプレート{templates.length === 0 ? "を開く" : "を選択"}
               </Button>
-              <Menu
-                anchorEl={templateMenuAnchorEl}
-                open={Boolean(templateMenuAnchorEl)}
-                onClose={handleTemplateMenuClose}
-              >
-                <MenuItem onClick={handleLoadNewTemplate}>
-                  <ListItemIcon><FileUp size={16} /></ListItemIcon>
-                  <ListItemText>新規読込</ListItemText>
+            </Tooltip>
+            <Menu
+              anchorEl={templateMenuAnchorEl}
+              open={Boolean(templateMenuAnchorEl)}
+              onClose={handleTemplateMenuClose}
+            >
+              <MenuItem onClick={handleLoadNewTemplate}>
+                <ListItemIcon><FileUp size={16} /></ListItemIcon>
+                <ListItemText>新規に開く</ListItemText>
+              </MenuItem>
+              {templates.length > 0 && <Divider />}
+              {templates.map((t) => (
+                <MenuItem
+                  key={t.id}
+                  selected={t.id === selectedTemplateId}
+                  sx={{ py: 0.5, pr: 1 }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                    <Checkbox
+                      checked={t.checked}
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleTemplateCheck(t.id);
+                      }}
+                    />
+                    <Box
+                      sx={{ flexGrow: 1, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', mr: 1 }}
+                      onClick={() => {
+                        setSelectedTemplateId(t.id);
+                        setPreviewMode('template');
+                      }}
+                    >
+                      <ListItemText
+                        primary={t.name}
+                        slotProps={{ primary: { variant: 'body2' } }}
+                      />
+                    </Box>
+                    <IconButton
+                      size="small"
+                      color="error"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeTemplate(t.id);
+                      }}
+                    >
+                      <Trash2 size={14} />
+                    </IconButton>
+                  </Box>
                 </MenuItem>
-                {templates.length > 0 && <Divider />}
-                {templates.map((t) => (
-                  <MenuItem key={t.id} onClick={() => toggleTemplateCheck(t.id)}>
-                    <Checkbox checked={t.checked} size="small" />
-                    <ListItemText primary={t.name} />
-                  </MenuItem>
-                ))}
-              </Menu>
+              ))}
+            </Menu>
 
-              <ToggleButtonGroup value={previewMode} exclusive onChange={(_, mode) => mode && setPreviewMode(mode)} size="small" className={styles.modeToggleGroup} sx={{ height: '36.5px' }}>
-                <ToggleButton value="standard" className={clsx(styles.modeToggleBtn, previewMode === 'standard' ? styles.active : styles.inactive)}><FileText size={16} className={styles.buttonIcon} />標準</ToggleButton>
-                <ToggleButton value="template" className={clsx(styles.modeToggleBtn, previewMode === 'template' ? styles.active : styles.inactive)}><LayoutTemplate size={16} className={styles.buttonIcon} />テンプレート</ToggleButton>
+            <Tooltip title={templates.length === 0 ? 'テンプレートを開くと切り替え可能になります' : ''} arrow>
+              <ToggleButtonGroup value={previewMode} exclusive onChange={(_, mode) => mode && setPreviewMode(mode)} size="small" className={styles.modeToggleGroup} sx={{ height: '36.5px', ...(templates.length === 0 && { pointerEvents: 'auto', cursor: 'default' }) }}>
+                <ToggleButton value="standard" disabled={templates.length === 0} className={clsx(styles.modeToggleBtn, previewMode === 'standard' ? styles.active : styles.inactive)} sx={templates.length === 0 ? { pointerEvents: 'none' } : {}}><FileText size={16} className={styles.buttonIcon} />標準</ToggleButton>
+                <ToggleButton value="template" disabled={templates.length === 0} className={clsx(styles.modeToggleBtn, previewMode === 'template' ? styles.active : styles.inactive)} sx={templates.length === 0 ? { pointerEvents: 'none' } : {}}><LayoutTemplate size={16} className={styles.buttonIcon} />テンプレート</ToggleButton>
               </ToggleButtonGroup>
+            </Tooltip>
 
-              <ButtonGroup variant="contained" ref={anchorEl ? null : null} sx={{ height: '36.5px', boxShadow: 'none' }}>
-                <Button startIcon={isExporting ? <CircularProgress size={16} color="inherit" /> : <Printer size={16} />} onClick={() => window.print()} disabled={isExporting}>PDF保存/印刷</Button>
-                <Button size="small" onClick={handleMenuClick}>
+            {templates.length === 0 ? (
+              /* テンプレート未読込時は PDF保存がメイン（単一ボタン） */
+              <Button
+                variant="contained"
+                startIcon={isExporting ? <CircularProgress size={16} color="inherit" /> : <Printer size={16} />}
+                onClick={() => window.print()}
+                disabled={isExporting}
+                sx={{ height: '36.5px', boxShadow: 'none' }}
+              >
+                PDF保存/印刷
+              </Button>
+            ) : (
+              /* テンプレート読込済み時は テンプレート形式で保存がメイン（スプリットボタン） */
+              <ButtonGroup variant="contained" sx={{ height: '36.5px', boxShadow: 'none' }}>
+                <Button
+                  startIcon={isExporting ? <CircularProgress size={16} color="inherit" /> : <Download size={16} />}
+                  onClick={() => handleExportTemplates()}
+                  disabled={isExporting}
+                >
+                  テンプレート形式で保存
+                </Button>
+                <Button
+                  size="small"
+                  onClick={handleMenuClick}
+                  sx={{ px: 1, minWidth: 0 }}
+                >
                   <ChevronDown size={16} />
                 </Button>
               </ButtonGroup>
-              <Menu
-                anchorEl={anchorEl}
-                open={Boolean(anchorEl)}
-                onClose={handleMenuClose}
-              >
-                <MenuItem onClick={() => handleExportClick('template')} sx={templates.filter(t => t.checked).length <= 0 ? { display: 'none' } : {}}>
-                  {`テンプレート形式で保存 (${templates.filter(t => t.checked).length}件)`}
+            )}
+
+            <Menu
+              anchorEl={anchorEl}
+              open={Boolean(anchorEl)}
+              onClose={handleMenuClose}
+              transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+              anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+            >
+              {/* テンプレートがある場合のみプルダウンにPDF保存が入る */}
+              {templates.length > 0 && (
+                <MenuItem onClick={() => { handleMenuClose(); window.print(); }}>
+                  <ListItemIcon><Printer size={18} /></ListItemIcon>
+                  <ListItemText primary="PDF保存/印刷" />
                 </MenuItem>
-                <MenuItem onClick={() => handleExportClick('json')}>JSON形式で保存</MenuItem>
-                <MenuItem onClick={() => handleExportClick('yaml')}>YAML形式で保存</MenuItem>
-              </Menu>
-            </Box>
-          </Toolbar>
-        </AppBar>
-
-        <Box className={styles.mainContent}>
-          {(!isMobile || mobileView === 'editor') && showSource && (
-            <Box
-              className={clsx(styles.editorPane, "print-hidden")}
-              style={{
-                display: 'block',
-                width: isMobile ? '100%' : editorWidth
-              }}
-            >
-              <ResumeEditor fontSize={editorFontSize} setFontSize={setEditorFontSize} />
-            </Box>
-          )}
-
-          {!isMobile && (
-            <Box className={clsx(styles.resizeHandle, "print-hidden", isResizing.current ? styles.dragging : styles.default)} onMouseDown={startResizing} />
-          )}
-
-          {(!isMobile || mobileView === 'preview') && (
-            <Box
-              className={styles.previewPane}
-              style={{
-                display: 'flex'
-              }}
-            >
-              {previewMode === 'template' && visibleTemplates.length > 1 && (
-                <>
-                  <div className={styles.templateNavPrevContainer}>
-                    <IconButton className={clsx(styles.templateNavBtn, styles.templateNavPrev, "print-hidden")} onClick={() => {
-                      const i = visibleTemplates.findIndex(t => t.id === selectedTemplateId);
-                      const prevIndex = i === -1 ? 0 : (i - 1 + visibleTemplates.length) % visibleTemplates.length;
-                      setSelectedTemplateId(visibleTemplates[prevIndex].id);
-                    }}><ChevronLeft /></IconButton>
-                  </div>
-                  <div className={styles.templateNavNextContainer}>
-                    <IconButton className={clsx(styles.templateNavBtn, styles.templateNavNext, "print-hidden")} onClick={() => {
-                      const i = visibleTemplates.findIndex(t => t.id === selectedTemplateId);
-                      const nextIndex = i === -1 ? 0 : (i + 1) % visibleTemplates.length;
-                      setSelectedTemplateId(visibleTemplates[nextIndex].id);
-                    }}><ChevronRight /></IconButton>
-                  </div>
-                </>
               )}
-              <Box className={clsx(styles.previewScrollArea, previewMode === 'template' && styles.templateScroll)}>
-                <Preview />
-              </Box>
-            </Box>
-          )}
-        </Box>
-
-        {/* PC版フッター */}
-        <Box component="footer" className={clsx(styles.appFooter, "print-hidden")}>
-          <Typography variant="caption" sx={{ color: 'inherit', marginBottom: '-0.2rem' }}>Copyright © 2026 ayeci</Typography>
-          <a href="https://github.com/AyeCi/Resumaker" target="_blank" rel="noopener noreferrer">
-            <FaGithub size={16} />
-            <span>GitHub</span>
-          </a>
-          <a href="/PRIVACY.md" target="_blank" rel="noopener noreferrer">
-            <Shield size={16} />
-            <span>Privacy Policy</span>
-          </a>
-        </Box>
-
-        {/* モバイル版フッター（タブバー） */}
-        <Box className={clsx(styles.mobileFooter, "print-hidden")}>
-          <PortraitUpload variant="tab" />
-          <Box
-            className={clsx(styles.mobileTabItem, mobileView === 'editor' && styles.active)}
-            onClick={() => setMobileView('editor')}
-          >
-            <Edit3 size={24} />
-            <Typography variant="caption">エディタ</Typography>
+            </Menu>
           </Box>
+        </Toolbar>
+      </AppBar>
+
+      <Box className={styles.mainContent}>
+        {(!isMobile || mobileView === 'editor') && showSource && (
           <Box
-            className={clsx(styles.mobileTabItem, mobileView === 'preview' && styles.active)}
-            onClick={() => {
-              setMobileView('preview');
-              // FortuneSheetがdisplay:noneから復帰した際に正しく再描画されるようにリサイズイベントを発火
-              setTimeout(() => window.dispatchEvent(new Event('resize')), 10);
+            className={clsx(styles.editorPane, "print-hidden")}
+            style={{
+              display: 'block',
+              width: isMobile ? '100%' : editorWidth
             }}
           >
-            <Eye size={24} />
-            <Typography variant="caption">プレビュー</Typography>
+            <ResumeEditor fontSize={editorFontSize} setFontSize={setEditorFontSize} />
           </Box>
-          <Box className={styles.mobileTabItem} onClick={() => setMobileMenuOpen(true)}>
-            <MenuIcon size={24} />
-            <Typography variant="caption">メニュー</Typography>
-          </Box>
-        </Box>
-
-        {/* モバイルメニューオーバーレイ */}
-        {mobileMenuOpen && (
-          <MobileMenu
-            onClose={() => setMobileMenuOpen(false)}
-            onPrint={() => window.print()}
-            onExport={handleExportClick}
-            onImport={() => importInputRef.current?.click()}
-            onLoadTemplate={() => templateInputRef.current?.click()}
-            onOpenSettings={() => setOptionDialogOpen(true)}
-            editorFontSize={editorFontSize}
-            setEditorFontSize={setEditorFontSize}
-          />
         )}
 
-        <ExportOptionDialog open={optionDialogOpen} onClose={() => setOptionDialogOpen(false)} />
-        <input type="file" title="テンプレートをロード" ref={templateInputRef} className={styles.hiddenInput} accept=".docx,.xlsx" multiple onClick={(e) => {
-          (e.target as HTMLInputElement).value = '';
-          // ピッカーを開く直前にフラグを立てる
-          sessionStorage.setItem(SESSION_KEYS.PICKING_FILE, 'true');
-        }} onChange={async (e) => {
-          const targetInput = e.target as HTMLInputElement;
-          const files = targetInput.files;
+        {!isMobile && (
+          <Box className={clsx(styles.resizeHandle, "print-hidden", isResizing.current ? styles.dragging : styles.default)} onMouseDown={startResizing} />
+        )}
 
-          if (!files || files.length === 0) {
-            sessionStorage.removeItem(SESSION_KEYS.PICKING_FILE);
-            return;
-          }
-
-          // File オブジェクトをコピーしてから、DOM の FileList 参照を即座に解放
-          // Android Chrome ではファイルピッカーの FileList がメモリを保持し続けるため
-          const filesArray: (File | null)[] = Array.from(files);
-          targetInput.value = ''; // FileList を解放（処理に先行して実行）
-
-          setSelectedTemplateId(null);
-          setPreviewMode('standard');
-
-          sessionStorage.setItem(SESSION_KEYS.HEAVY_TASK, 'true');
-          sessionStorage.removeItem(SESSION_KEYS.PICKING_FILE);
-
-          const needsLimit = checkNeedsLimit();
-
-          if (needsLimit && filesArray.length > MAX_TEMPLATES) {
-            notify("template-limit-reached", "warning", `先頭の${MAX_TEMPLATES}件のみ読み込みました。モバイル環境ではメモリの制約のため一度に読み込めるテンプレートが制限されます。`);
-            filesArray.length = MAX_TEMPLATES; // splice で不要な参照を即座に切る
-          }
-
-          try {
-            const needsLimitFlag = checkNeedsLimit();
-
-            // 5件一括ではなく、1件ずつaddTemplatesを呼び出すことでクラッシュを防止
-            // 理由: 1つの async 関数クロージャ内で全ファイルを処理すると、
-            // V8 のアクティベーションレコードがすべてのローカル変数を
-            // await 間で保持し続け、GC が効かずメモリスパイクが発生する。
-            // 1件ずつ呼び出せば各 async クロージャは return 後に即座に GC 対象になる。
-            for (let i = 0; i < filesArray.length; i++) {
-              const file = filesArray[i];
-              if (!file) continue;
-              filesArray[i] = null; // File 参照を先に切断
-
-              await addTemplates([file]);
-
-              // モバイルではGCに十分な時間を与える
-              if (needsLimitFlag) {
-                await new Promise(r => setTimeout(r, 500));
-              }
-            }
-
-            setPreviewMode('template');
-            if (!needsLimitFlag) {
-              setMobileView('preview');
-            } else {
-              setMobileView('editor');
-            }
-          } finally {
-            filesArray.length = 0;
-          }
-        }} />
-        <input type="file" title="データを読み込む" ref={importInputRef} className={styles.hiddenInput} accept=".json,.yaml,.yml" onClick={(e) => {
-          (e.target as HTMLInputElement).value = '';
-          // ピッカーを開く直前にフラグを立てる
-          sessionStorage.setItem(SESSION_KEYS.PICKING_FILE, 'true');
-        }} onChange={(e) => {
-          // キャンセルまたは選択完了時に消す
-          sessionStorage.removeItem(SESSION_KEYS.PICKING_FILE);
-
-          const file = e.target.files?.[0];
-          if (file) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-              const content = ev.target?.result as string;
-              if (content) importData(content, 'auto');
-            };
-            reader.readAsText(file);
-          }
-        }} />
+        {(!isMobile || mobileView === 'preview') && (
+          <Box
+            className={styles.previewPane}
+            style={{
+              display: 'flex'
+            }}
+          >
+            {/* モバイル版: プレビューモード切替トグル */}
+            {isMobile && templates.length > 0 && (
+              <Box className={clsx(styles.mobilePreviewToggle, "print-hidden")}>
+                <Box
+                  className={clsx(styles.toggleOption, previewMode === 'standard' && styles.active)}
+                  onClick={() => setPreviewMode('standard')}
+                >
+                  <FileText size={14} />
+                  <span>標準</span>
+                </Box>
+                <Box
+                  className={clsx(styles.toggleOption, previewMode === 'template' && styles.active)}
+                  onClick={() => setPreviewMode('template')}
+                >
+                  <LayoutTemplate size={14} />
+                  <span>テンプレート</span>
+                </Box>
+              </Box>
+            )}
+            {previewMode === 'template' && visibleTemplates.length > 1 && (
+              <>
+                <div className={styles.templateNavPrevContainer}>
+                  <IconButton className={clsx(styles.templateNavBtn, styles.templateNavPrev, "print-hidden")} onClick={() => {
+                    const i = visibleTemplates.findIndex(t => t.id === selectedTemplateId);
+                    const prevIndex = i === -1 ? 0 : (i - 1 + visibleTemplates.length) % visibleTemplates.length;
+                    setSelectedTemplateId(visibleTemplates[prevIndex].id);
+                  }}><ChevronLeft /></IconButton>
+                </div>
+                <div className={styles.templateNavNextContainer}>
+                  <IconButton className={clsx(styles.templateNavBtn, styles.templateNavNext, "print-hidden")} onClick={() => {
+                    const i = visibleTemplates.findIndex(t => t.id === selectedTemplateId);
+                    const nextIndex = i === -1 ? 0 : (i + 1) % visibleTemplates.length;
+                    setSelectedTemplateId(visibleTemplates[nextIndex].id);
+                  }}><ChevronRight /></IconButton>
+                </div>
+              </>
+            )}
+            <Box className={clsx(styles.previewScrollArea, previewMode === 'template' && styles.templateScroll)}>
+              <Preview />
+            </Box>
+          </Box>
+        )}
       </Box>
-    </NotificationProvider>
+
+      {/* PC版フッター */}
+      <Box component="footer" className={clsx(styles.appFooter, "print-hidden")}>
+        <Typography variant="caption" sx={{ color: 'inherit', marginBottom: '-0.2rem' }}>Copyright © 2026 ayeci</Typography>
+        <a href="https://github.com/AyeCi/Resumaker" target="_blank" rel="noopener noreferrer">
+          <FaGithub size={16} />
+          <span>GitHub</span>
+        </a>
+        <a href="/PRIVACY.md" target="_blank" rel="noopener noreferrer">
+          <Shield size={16} />
+          <span>Privacy Policy</span>
+        </a>
+      </Box>
+
+      {/* モバイル版フッター（タブバー） */}
+      <Box className={clsx(styles.mobileFooter, "print-hidden")}>
+        <PortraitUpload variant="tab" />
+        <Box
+          className={clsx(styles.mobileTabItem, mobileView === 'editor' && styles.active)}
+          onClick={() => setMobileView('editor')}
+        >
+          <Edit3 size={24} />
+          <Typography variant="caption">エディタ</Typography>
+        </Box>
+        <Box
+          className={clsx(styles.mobileTabItem, mobileView === 'preview' && styles.active)}
+          onClick={() => {
+            setMobileView('preview');
+            // FortuneSheetがdisplay:noneから復帰した際に正しく再描画されるようにリサイズイベントを発火
+            setTimeout(() => window.dispatchEvent(new Event('resize')), 10);
+          }}
+        >
+          <Eye size={24} />
+          <Typography variant="caption">プレビュー</Typography>
+        </Box>
+        <Box className={styles.mobileTabItem} onClick={() => setMobileMenuOpen(true)}>
+          <MenuIcon size={24} />
+          <Typography variant="caption">メニュー</Typography>
+        </Box>
+      </Box>
+
+      {/* モバイルメニューオーバーレイ */}
+      {mobileMenuOpen && (
+        <MobileMenu
+          onClose={() => setMobileMenuOpen(false)}
+          onPrint={() => window.print()}
+          onExport={handleExportClick}
+          onImport={() => importInputRef.current?.click()}
+          onLoadTemplate={() => templateInputRef.current?.click()}
+          onOpenSettings={() => setOptionDialogOpen(true)}
+          editorFontSize={editorFontSize}
+          setEditorFontSize={setEditorFontSize}
+        />
+      )}
+
+      <ExportOptionDialog open={optionDialogOpen} onClose={() => setOptionDialogOpen(false)} />
+      <input type="file" title="テンプレートをロード" ref={templateInputRef} className={styles.hiddenInput} accept=".docx,.xlsx" multiple onClick={(e) => {
+        (e.target as HTMLInputElement).value = '';
+        // ピッカーを開く直前にフラグを立てる
+        sessionStorage.setItem(SESSION_KEYS.PICKING_FILE, 'true');
+      }} onChange={async (e) => {
+        const targetInput = e.target as HTMLInputElement;
+        const files = targetInput.files;
+
+        if (!files || files.length === 0) {
+          sessionStorage.removeItem(SESSION_KEYS.PICKING_FILE);
+          return;
+        }
+
+        // File オブジェクトをコピーしてから、DOM の FileList 参照を即座に解放
+        // Android Chrome ではファイルピッカーの FileList がメモリを保持し続けるため
+        const filesArray: (File | null)[] = Array.from(files);
+        targetInput.value = ''; // FileList を解放（処理に先行して実行）
+
+        setSelectedTemplateId(null);
+        setPreviewMode('standard');
+
+        sessionStorage.setItem(SESSION_KEYS.HEAVY_TASK, 'true');
+        sessionStorage.removeItem(SESSION_KEYS.PICKING_FILE);
+
+        const needsLimit = checkNeedsLimit();
+
+        if (needsLimit && filesArray.length > MAX_TEMPLATES) {
+          notify("template-limit-reached", "warning", `先頭の${MAX_TEMPLATES}件のみ読み込みました。モバイル環境ではメモリの制約のため一度に読み込めるテンプレートが制限されます。`);
+          filesArray.length = MAX_TEMPLATES; // splice で不要な参照を即座に切る
+        }
+
+        try {
+          const needsLimitFlag = checkNeedsLimit();
+
+          // 5件一括ではなく、1件ずつaddTemplatesを呼び出すことでクラッシュを防止
+          // 理由: 1つの async 関数クロージャ内で全ファイルを処理すると、
+          // V8 のアクティベーションレコードがすべてのローカル変数を
+          // await 間で保持し続け、GC が効かずメモリスパイクが発生する。
+          // 1件ずつ呼び出せば各 async クロージャは return 後に即座に GC 対象になる。
+          for (let i = 0; i < filesArray.length; i++) {
+            const file = filesArray[i];
+            if (!file) continue;
+            filesArray[i] = null; // File 参照を先に切断
+
+            await addTemplates([file]);
+
+            // モバイルではGCに十分な時間を与える
+            if (needsLimitFlag) {
+              await new Promise(r => setTimeout(r, 500));
+            }
+          }
+
+          setPreviewMode('template');
+          if (!needsLimitFlag) {
+            setMobileView('preview');
+          } else {
+            setMobileView('editor');
+          }
+        } finally {
+          filesArray.length = 0;
+        }
+      }} />
+      <input type="file" title="データを読み込む" ref={importInputRef} className={styles.hiddenInput} accept=".json,.yaml,.yml" onClick={(e) => {
+        (e.target as HTMLInputElement).value = '';
+        // ピッカーを開く直前にフラグを立てる
+        sessionStorage.setItem(SESSION_KEYS.PICKING_FILE, 'true');
+      }} onChange={(e) => {
+        // キャンセルまたは選択完了時に消す
+        sessionStorage.removeItem(SESSION_KEYS.PICKING_FILE);
+
+        const file = e.target.files?.[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            const content = ev.target?.result as string;
+            if (content) importData(content, 'auto');
+          };
+          reader.readAsText(file);
+        }
+      }} />
+    </Box>
   );
 }
 

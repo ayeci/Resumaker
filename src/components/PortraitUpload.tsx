@@ -74,7 +74,7 @@ export const PortraitUpload: React.FC<PortraitUploadProps> = ({ variant = 'icon'
                             <Typography variant="caption" className={styles.tabLabel}>写真</Typography>
                         </>
                     ) : (
-                        <Tooltip title="写真をアップロード">
+                        <Tooltip title="写真をアップロード" arrow>
                             <IconButton size="small" className={styles.toolbarIconBtn}>
                                 <Camera size={18} />
                             </IconButton>
