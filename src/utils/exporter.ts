@@ -28,6 +28,62 @@ const toArrayBuffer = async (template: File | ArrayBuffer): Promise<ArrayBuffer>
     return template.arrayBuffer();
 };
 
+/** 画像データの解決結果 */
+interface ResolvedImage {
+    bytes: Uint8Array;
+    ext: string; // png, jpeg, etc.
+}
+
+/**
+ * Blob URL を data URL に変換する
+ * portrait が Blob URL (blob:...) の場合に exporter が期待する data:image/...;base64,... 形式へ変換する
+ */
+const blobUrlToDataUrl = async (url: string): Promise<string> => {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+};
+
+/**
+ * portrait の値（Blob URL / Base64 データ URL）から直接バイナリを取得する
+ * Excel エクスポート用（ZIP に直接バイナリを書き込む）
+ */
+const resolvePortraitImage = async (portrait: string | undefined): Promise<ResolvedImage | null> => {
+    if (!portrait) return null;
+
+    // Blob URL (blob:...) の場合: fetch で直接バイナリを取得
+    if (portrait.startsWith('blob:')) {
+        try {
+            const response = await fetch(portrait);
+            const blob = await response.blob();
+            const buffer = await blob.arrayBuffer();
+            const mimeMatch = blob.type.match(/image\/(png|jpeg|jpg|gif|tiff)/);
+            const ext = mimeMatch ? (mimeMatch[1] === 'jpg' ? 'jpeg' : mimeMatch[1]) : 'png';
+            return { bytes: new Uint8Array(buffer), ext };
+        } catch (e) {
+            console.error('Portrait Blob URL fetch failed:', e);
+            return null;
+        }
+    }
+
+    // Base64 データ URL (data:image/...;base64,...) の場合
+    const dataUrlMatch = portrait.match(/^data:image\/(png|jpeg|jpg|gif|tiff);base64,(.+)$/);
+    if (dataUrlMatch) {
+        const ext = dataUrlMatch[1] === 'jpg' ? 'jpeg' : dataUrlMatch[1];
+        const bin = atob(dataUrlMatch[2]);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return { bytes, ext };
+    }
+
+    return null;
+};
+
 /**
  * 履歴書データをWord形式のBlobとして生成する
  * テンプレートファイルのタグを、履歴書データで置換する
@@ -37,6 +93,17 @@ const toArrayBuffer = async (template: File | ArrayBuffer): Promise<ArrayBuffer>
  * @returns 生成されたWordファイルのBlob
  */
 export const generateWordBlob = async (resume: ResumeConfig, templateFile: File | ArrayBuffer, options: ExportOptions = DEFAULT_EXPORT_OPTIONS): Promise<Blob> => {
+    // Blob URL の portrait を data URL に変換（画像モジュールは Base64 data URL を前提とするため）
+    let portraitDataUrl = resume.portrait || '';
+    if (portraitDataUrl.startsWith('blob:')) {
+        try {
+            portraitDataUrl = await blobUrlToDataUrl(portraitDataUrl);
+        } catch (e) {
+            console.error('Portrait Blob URL conversion failed:', e);
+            portraitDataUrl = '';
+        }
+    }
+
     const arrayBuffer = await toArrayBuffer(templateFile);
     const zip = new PizZip(arrayBuffer);
 
@@ -317,7 +384,7 @@ export const generateWordBlob = async (resume: ResumeConfig, templateFile: File 
         ...resume, // ユーザー定義の全フィールドを展開
         name: resume.name,
         name_kana: resume.name_kana,
-        portrait: resume.portrait,
+        portrait: portraitDataUrl,
         gender: resume.gender,
         updated: new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' }),
         updated_raw: new Date().toISOString(),
@@ -495,6 +562,8 @@ export interface ExportData {
     values: Record<string, string | number | undefined>;
     lists: Record<string, HistoryItem[]>;
     portrait?: string;
+    /** 事前に解決された portrait のバイナリデータ（Blob URL 対応用） */
+    resolvedImage?: ResolvedImage;
 }
 
 /**
@@ -772,7 +841,22 @@ export const generateExcelFromData = async (data: ExportData, templateFile: File
         zip.file('xl/sharedStrings.xml', newSSXml);
     }
 
-    if (data.portrait) {
+    // 画像埋め込み処理: 画像ファイルの追加、Content_Types登録、drawing参照の置換、relationship設定
+    let portraitExt: string | null = null;
+
+    if (data.resolvedImage) {
+        // 事前に解決済みの画像バイナリを直接使用
+        const { bytes, ext } = data.resolvedImage;
+        zip.file(`xl/media/portrait1.${ext}`, bytes);
+        portraitExt = ext;
+
+        let ctXml = zip.file('[Content_Types].xml')?.asText();
+        if (ctXml && !ctXml.includes(`Extension="${ext}"`)) {
+            ctXml = ctXml.replace('</Types>', `<Default Extension="${ext}" ContentType="image/${ext}"/></Types>`);
+            zip.file('[Content_Types].xml', ctXml);
+        }
+    } else if (data.portrait) {
+        // 従来の Base64 データ URL からの処理（後方互換）
         const dUM = data.portrait.match(/^data:(image\/(png|jpeg|jpg|gif|tiff));base64,(.+)$/);
         if (dUM) {
             const ext = dUM[2] === 'jpg' ? 'jpeg' : dUM[2];
@@ -780,40 +864,45 @@ export const generateExcelFromData = async (data: ExportData, templateFile: File
             const b = new Uint8Array(bin.length);
             for (let j = 0; j < bin.length; j++) b[j] = bin.charCodeAt(j);
             zip.file(`xl/media/portrait1.${ext}`, b);
+            portraitExt = ext;
 
             let ctXml = zip.file('[Content_Types].xml')?.asText();
             if (ctXml && !ctXml.includes(`Extension="${ext}"`)) {
                 ctXml = ctXml.replace('</Types>', `<Default Extension="${ext}" ContentType="${dUM[1]}"/></Types>`);
                 zip.file('[Content_Types].xml', ctXml);
             }
+        }
+    }
 
-            const drFiles = Object.keys(zip.files).filter(f => f.match(/^xl\/drawings\/drawing\d+\.xml$/));
-            for (const dp of drFiles) {
-                const drawingFile = zip.file(dp);
-                let dXml = drawingFile?.asText();
-                if (dXml && dXml.includes('{portrait}')) {
-                    const aP = /<xdr:twoCellAnchor[^>]*>[\s\S]*?<\/xdr:twoCellAnchor>/g;
-                    let aM;
-                    while ((aM = aP.exec(dXml)) !== null) {
-                        if (aM[0].includes('{portrait}')) {
-                            const fM = aM[0].match(/<xdr:from>[\s\S]*?<\/xdr:from>/);
-                            const tM = aM[0].match(/<xdr:to>[\s\S]*?<\/xdr:to>/);
-                            const lSM = aM[0].match(/<a:ln[^>]*(?:\/>|>[\s\S]*?<\/a:ln>)/);
-                            const eM = aM[0].match(/<a:ext\s+cx="(\d+)"\s+cy="(\d+)"/);
-                            if (fM && tM) {
-                                const pXml = `<xdr:twoCellAnchor>${fM[0]}${tM[0]}<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="9999" name="P"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rIdP1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${eM ? eM[1] : '914400'}" cy="${eM ? eM[2] : '1219200'}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>${lSM ? '\n    ' + lSM[0] : ''}</xdr:spPr></xdr:pic><xdr:clientData/></xdr:twoCellAnchor>`;
-                                dXml = dXml.replace(aM[0], pXml);
-                            }
+    // drawing の {portrait} タグを画像参照に置換し、relationship を設定
+    if (portraitExt) {
+        const ext = portraitExt;
+        const drFiles = Object.keys(zip.files).filter(f => f.match(/^xl\/drawings\/drawing\d+\.xml$/));
+        for (const dp of drFiles) {
+            const drawingFile = zip.file(dp);
+            let dXml = drawingFile?.asText();
+            if (dXml && dXml.includes('{portrait}')) {
+                const aP = /<xdr:twoCellAnchor[^>]*>[\s\S]*?<\/xdr:twoCellAnchor>/g;
+                let aM;
+                while ((aM = aP.exec(dXml)) !== null) {
+                    if (aM[0].includes('{portrait}')) {
+                        const fM = aM[0].match(/<xdr:from>[\s\S]*?<\/xdr:from>/);
+                        const tM = aM[0].match(/<xdr:to>[\s\S]*?<\/xdr:to>/);
+                        const lSM = aM[0].match(/<a:ln[^>]*(?:\/>|>[\s\S]*?<\/a:ln>)/);
+                        const eM = aM[0].match(/<a:ext\s+cx="(\d+)"\s+cy="(\d+)"/);
+                        if (fM && tM) {
+                            const pXml = `<xdr:twoCellAnchor>${fM[0]}${tM[0]}<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="9999" name="P"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rIdP1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${eM ? eM[1] : '914400'}" cy="${eM ? eM[2] : '1219200'}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>${lSM ? '\n    ' + lSM[0] : ''}</xdr:spPr></xdr:pic><xdr:clientData/></xdr:twoCellAnchor>`;
+                            dXml = dXml.replace(aM[0], pXml);
                         }
                     }
-                    zip.file(dp, dXml);
-                    const dN = dp.split('/').pop();
-                    const rP = `xl/drawings/_rels/${dN}.rels`;
-                    let rXml = zip.file(rP)?.asText() || `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`;
-                    if (!rXml.includes('rIdP1')) {
-                        rXml = rXml.replace('</Relationships>', `<Relationship Id="rIdP1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/portrait1.${ext}"/></Relationships>`);
-                        zip.file(rP, rXml);
-                    }
+                }
+                zip.file(dp, dXml);
+                const dN = dp.split('/').pop();
+                const rP = `xl/drawings/_rels/${dN}.rels`;
+                let rXml = zip.file(rP)?.asText() || `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`;
+                if (!rXml.includes('rIdP1')) {
+                    rXml = rXml.replace('</Relationships>', `<Relationship Id="rIdP1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/portrait1.${ext}"/></Relationships>`);
+                    zip.file(rP, rXml);
                 }
             }
         }
@@ -934,7 +1023,18 @@ export const generateExcelFromData = async (data: ExportData, templateFile: File
  */
 export const generateExcelBlob = async (resume: ResumeConfig, templateFile: File | ArrayBuffer | null | undefined, options: ExportOptions = DEFAULT_EXPORT_OPTIONS): Promise<Blob> => {
     if (!templateFile) throw new Error("Template required");
-    return generateExcelFromData(prepareResumeData(resume, options), templateFile);
+    const data = prepareResumeData(resume, options);
+
+    // Blob URL の portrait を事前に解決（Base64 を介さず直接バイナリ取得）
+    if (data.portrait && data.portrait.startsWith('blob:')) {
+        const resolved = await resolvePortraitImage(data.portrait);
+        if (resolved) {
+            data.resolvedImage = resolved;
+        }
+        data.portrait = undefined; // Blob URL は Excel 内部で処理できないため除去
+    }
+
+    return generateExcelFromData(data, templateFile);
 };
 
 /**

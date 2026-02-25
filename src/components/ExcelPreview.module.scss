@@ -48,6 +48,12 @@
             display: none !important;
         }
 
+        /* 画像ダイアログだけは表示を復元（FortuneSheet は画像をこのクラス内に描画する） */
+        .luckysheet-modal-dialog-image {
+            display: block !important;
+            pointer-events: none !important;
+        }
+
         /* 列・行ヘッダー、およびコーナーボックスを完全に排除 */
         .luckysheet-cols-h,
         .luckysheet-rows-h,

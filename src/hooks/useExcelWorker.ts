@@ -60,10 +60,33 @@ const processNextTask = () => {
     };
 
     // Workerには File オブジェクトを直接送る
-    worker.postMessage({
-        type: 'PROCESS_EXCEL',
-        payload: { resume: currentTask.resume, file: currentTask.file }
-    });
+    // Blob URL の portrait は Worker からアクセス不可なため、メインスレッドで事前変換
+    const resumeForWorker = { ...currentTask.resume };
+    (async () => {
+        try {
+            if (resumeForWorker.portrait && resumeForWorker.portrait.startsWith('blob:')) {
+                const response = await fetch(resumeForWorker.portrait);
+                const blob = await response.blob();
+                const buffer = await blob.arrayBuffer();
+                const bytes = new Uint8Array(buffer);
+                // Workerに送るためdata URLに変換（Worker内のresolvePortraitImageが処理可能）
+                let binary = '';
+                for (let i = 0; i < bytes.length; i++) {
+                    binary += String.fromCharCode(bytes[i]);
+                }
+                const mimeMatch = blob.type.match(/image\/(png|jpeg|jpg|gif|tiff)/);
+                const mimeType = mimeMatch ? blob.type : 'image/png';
+                resumeForWorker.portrait = `data:${mimeType};base64,${btoa(binary)}`;
+            }
+        } catch (e) {
+            console.error('Portrait conversion for Worker failed:', e);
+            resumeForWorker.portrait = ''; // 変換失敗時は写真なしで続行
+        }
+        worker!.postMessage({
+            type: 'PROCESS_EXCEL',
+            payload: { resume: resumeForWorker, file: currentTask.file }
+        });
+    })();
 };
 
 const enqueueExcelTask = (resume: ResumeConfig, file: File): Promise<FortuneSheetResult> => {
