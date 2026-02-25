@@ -8,9 +8,10 @@ import { createContext, useContext } from 'react';
 import type { ResumeConfig, TemplateEntry, ExportOptions } from '../types/resume';
 
 /**
- * エディタのモード ('json' | 'yaml')
+ * エディタのモード ('jsonc' | 'yaml')
+ * jsonc = JSON with Comments (VS Code互換、// コメント対応)
  */
-export type EditorMode = 'json' | 'yaml';
+export type EditorMode = 'jsonc' | 'yaml';
 
 /**
  * ResumeContextが提供する値と関数の型定義
@@ -31,7 +32,7 @@ export interface ResumeContextType {
     /** パースエラー情報 (nullならエラーなし) */
     parseError: { message: string; line?: number } | null;
     /** 外部データをインポートする */
-    importData: (data: string | ResumeConfig, type: 'json' | 'yaml' | 'auto') => void;
+    importData: (data: string | ResumeConfig, type: 'jsonc' | 'yaml' | 'auto') => void;
     /** インポート元のフォーマット */
     sourceFormat: 'word' | 'excel' | 'pdf' | 'other' | null;
     /** ロードされたテンプレートリスト */

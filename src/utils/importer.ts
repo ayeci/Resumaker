@@ -40,7 +40,7 @@ export const parseFile = async (file: File): Promise<string | ResumeConfig> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
 
-        if (extension === 'json' || extension === 'yaml' || extension === 'yml') {
+        if (extension === 'json' || extension === 'jsonc' || extension === 'yaml' || extension === 'yml') {
             reader.onload = (e) => {
                 resolve(e.target?.result as string);
             };

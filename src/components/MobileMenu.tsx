@@ -18,7 +18,7 @@ import clsx from 'clsx';
 interface MobileMenuProps {
     onClose: () => void;
     onPrint: () => void;
-    onExport: (format: 'template' | 'json' | 'yaml') => void;
+    onExport: (format: 'template' | 'jsonc' | 'yaml') => void;
     onImport: () => void;
     onLoadTemplate: () => void;
     onOpenSettings: () => void;
@@ -86,7 +86,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                             fullWidth
                         >
                             <ToggleButton value="yaml">YAML</ToggleButton>
-                            <ToggleButton value="json">JSON</ToggleButton>
+                            <ToggleButton value="jsonc">JSONC</ToggleButton>
                         </ToggleButtonGroup>
                     </Box>
 

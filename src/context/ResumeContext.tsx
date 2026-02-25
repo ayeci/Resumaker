@@ -6,6 +6,7 @@
 
 import { useState, useCallback, type ReactNode, useRef, useMemo, useEffect } from 'react';
 import yaml from 'js-yaml';
+import * as jsonc from 'jsonc-parser';
 import { DEFAULT_RESUME, type ResumeConfig, DEFAULT_EXPORT_OPTIONS, type ExportOptions, type TemplateEntry } from '../types/resume';
 import { ResumeContext, type EditorMode } from './ResumeHooks';
 import { normalizeResumeData } from '../utils/importer';
@@ -78,14 +79,116 @@ const prepareResumeForEditor = (resume: ResumeConfig): RecursivePartial<ResumeCo
 };
 
 /**
+ * YAML テキストから `#` コメントを抽出し、`//` 形式に変換して JSON テキストに挿入する
+ * キーの前にあるコメントを対応する JSON キーの前に配置する
+ * @param yamlText 元の YAML テキスト
+ * @param jsonText 変換後の JSON テキスト
+ * @returns コメント付き JSONC テキスト
+ */
+const convertYamlCommentsToJsonc = (yamlText: string, jsonText: string): string => {
+    const yamlLines = yamlText.split('\n');
+    // キーとその前のコメントを収集
+    const commentMap = new Map<string, string[]>();
+    let pendingComments: string[] = [];
+
+    for (const line of yamlLines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('#')) {
+            // YAML コメント行 → JSONC 形式に変換
+            pendingComments.push(trimmed.replace(/^#+\s*/, '// '));
+        } else if (trimmed && pendingComments.length > 0) {
+            // コメント直後の最初のキーを取得
+            const keyMatch = trimmed.match(/^([\w_-]+)\s*:/);
+            if (keyMatch) {
+                commentMap.set(keyMatch[1], [...pendingComments]);
+            }
+            pendingComments = [];
+        } else if (!trimmed) {
+            // 空行でもコメントを保持
+        } else {
+            pendingComments = [];
+        }
+    }
+
+    // JSON テキストにコメントを挿入
+    const jsonLines = jsonText.split('\n');
+    const result: string[] = [];
+    for (const jsonLine of jsonLines) {
+        // JSON キーを検出（"key": 形式）
+        const jsonKeyMatch = jsonLine.match(/^(\s*)"([\w_-]+)"\s*:/);
+        if (jsonKeyMatch) {
+            const [, indent, key] = jsonKeyMatch;
+            const comments = commentMap.get(key);
+            if (comments) {
+                for (const comment of comments) {
+                    result.push(`${indent}${comment}`);
+                }
+                commentMap.delete(key);
+            }
+        }
+        result.push(jsonLine);
+    }
+
+    return result.join('\n');
+};
+
+/**
+ * JSONC テキストから `//` コメントを抽出し、`#` 形式に変換して YAML テキストに挿入する
+ * @param jsoncText 元の JSONC テキスト
+ * @param yamlText 変換後の YAML テキスト
+ * @returns コメント付き YAML テキスト
+ */
+const convertJsoncCommentsToYaml = (jsoncText: string, yamlText: string): string => {
+    const jsoncLines = jsoncText.split('\n');
+    const commentMap = new Map<string, string[]>();
+    let pendingComments: string[] = [];
+
+    for (const line of jsoncLines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('//')) {
+            pendingComments.push(trimmed.replace(/^\/\/\s*/, '# '));
+        } else if (trimmed && pendingComments.length > 0) {
+            const keyMatch = trimmed.match(/^"([\w_-]+)"\s*:/);
+            if (keyMatch) {
+                commentMap.set(keyMatch[1], [...pendingComments]);
+            }
+            pendingComments = [];
+        } else if (!trimmed) {
+            // 空行
+        } else {
+            pendingComments = [];
+        }
+    }
+
+    const yamlLines = yamlText.split('\n');
+    const result: string[] = [];
+    for (const yamlLine of yamlLines) {
+        const yamlKeyMatch = yamlLine.match(/^(\s*)([\w_-]+)\s*:/);
+        if (yamlKeyMatch) {
+            const [, indent, key] = yamlKeyMatch;
+            const comments = commentMap.get(key);
+            if (comments) {
+                for (const comment of comments) {
+                    result.push(`${indent}${comment}`);
+                }
+                commentMap.delete(key);
+            }
+        }
+        result.push(yamlLine);
+    }
+
+    return result.join('\n');
+};
+
+/**
  * 履歴書データを指定された形式の文字列にシリアライズする
  * @param resume 履歴書データ
- * @param mode シリアライズ形式 ('json' | 'yaml')
+ * @param mode シリアライズ形式 ('jsonc' | 'yaml')
  * @returns シリアライズされた文字列
  */
 const serializeResume = (resume: ResumeConfig, mode: EditorMode): string => {
     const data = prepareResumeForEditor(resume);
-    return mode === 'json'
+    return mode === 'jsonc'
         ? JSON.stringify(data, null, 2)
         : yaml.dump(data, {
             lineWidth: -1, // 行の折り返しを無効化
@@ -171,7 +274,7 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
         }
         setRawText(text);
         try {
-            const parsed = mode === 'json' ? JSON.parse(text) : yaml.load(text, { schema: yaml.JSON_SCHEMA });
+            const parsed = mode === 'jsonc' ? jsonc.parse(text) : yaml.load(text, { schema: yaml.JSON_SCHEMA });
             if (parsed && typeof parsed === 'object') {
                 const normalized = normalizeResumeData(parsed as Partial<ResumeConfig>);
                 setResumeState({ ...normalized, portrait: resume.portrait } as ResumeConfig);
@@ -205,7 +308,7 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
      * @param data インポートするデータ（JSON/YAML文字列、またはResumeConfigオブジェクト）
      * @param type データの形式 ('json', 'yaml', 'auto')
      */
-    const importData = useCallback((data: string | ResumeConfig, type: 'json' | 'yaml' | 'auto') => {
+    const importData = useCallback((data: string | ResumeConfig, type: 'jsonc' | 'yaml' | 'auto') => {
         isImporting.current = true;
 
         // 処理の完了を待たずにフラグを戻すと競合のリスクがあるため、
@@ -214,11 +317,11 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
         setTimeout(() => { isImporting.current = false; }, 500);
 
         if (typeof data === 'string') {
-            const newMode: EditorMode = type === 'auto' ? (data.trim().startsWith('{') ? 'json' : 'yaml') : type;
+            const newMode: EditorMode = type === 'auto' ? (data.trim().startsWith('{') ? 'jsonc' : 'yaml') : type;
             setMode(newMode);
             setRawText(data);
             try {
-                const parsed = newMode === 'json' ? JSON.parse(data) : yaml.load(data, { schema: yaml.JSON_SCHEMA });
+                const parsed = newMode === 'jsonc' ? jsonc.parse(data) : yaml.load(data, { schema: yaml.JSON_SCHEMA });
                 if (parsed && typeof parsed === 'object') {
                     const normalized = normalizeResumeData(parsed as Partial<ResumeConfig>);
                     const portrait = (parsed as { portrait?: string }).portrait || resume.portrait;
@@ -340,9 +443,10 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
     const reformat = useCallback(async () => {
         try {
             let currentData: unknown;
-            if (mode === 'json') {
-                currentData = JSON.parse(rawText);
-                setRawText(JSON.stringify(currentData, null, 2));
+            if (mode === 'jsonc') {
+                // jsonc.format() はコメントを保持したまま整形できる
+                const edits = jsonc.format(rawText, undefined, { tabSize: 2, insertSpaces: true });
+                setRawText(jsonc.applyEdits(rawText, edits));
             } else {
                 currentData = yaml.load(rawText, { schema: yaml.JSON_SCHEMA });
                 if (currentData) {
@@ -376,8 +480,8 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
         try {
             let currentResume: ResumeConfig;
             // 現在のテキストをパース
-            if (mode === 'json') {
-                currentResume = JSON.parse(rawText);
+            if (mode === 'jsonc') {
+                currentResume = jsonc.parse(rawText);
             } else {
                 currentResume = yaml.load(rawText, { schema: yaml.JSON_SCHEMA }) as ResumeConfig;
             }
@@ -389,7 +493,15 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
             setResumeState(merged);
 
             // 新しいモードでシリアライズ
-            const newText = serializeResume(merged, targetMode);
+            let newText = serializeResume(merged, targetMode);
+
+            // コメント変換: 元のテキストからコメントを抽出し、新しいテキストに挿入
+            if (mode === 'yaml' && targetMode === 'jsonc') {
+                newText = convertYamlCommentsToJsonc(rawText, newText);
+            } else if (mode === 'jsonc' && targetMode === 'yaml') {
+                newText = convertJsoncCommentsToYaml(rawText, newText);
+            }
+
             setMode(targetMode);
             setRawText(newText);
             setParseError(null);
@@ -430,7 +542,7 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
                 setParseError(null);
 
                 // 現在のモードに合わせてテキストを設定
-                if (mode === 'json') {
+                if (mode === 'jsonc') {
                     setRawText(JSON.stringify(merged, null, 2));
                 } else {
                     setRawText(sampleYaml);

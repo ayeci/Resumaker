@@ -260,7 +260,7 @@ function AppContent() {
     }
   };
 
-  const handleExportClick = (format?: 'template' | 'json' | 'yaml') => {
+  const handleExportClick = (format?: 'template' | 'jsonc' | 'yaml') => {
     handleMenuClose();
     if (!format) return;
 
@@ -269,9 +269,10 @@ function AppContent() {
       return;
     }
 
-    if (format === 'json' || format === 'yaml') {
+    if (format === 'jsonc' || format === 'yaml') {
       const blob = new Blob([rawText], { type: 'text/plain;charset=utf-8' });
-      saveAs(blob, `resume.${format}`);
+      const ext = format === 'jsonc' ? 'json' : format;
+      saveAs(blob, `resume.${ext}`);
     }
   };
 
@@ -641,7 +642,7 @@ function AppContent() {
           filesArray.length = 0;
         }
       }} />
-      <input type="file" title="データを読み込む" ref={importInputRef} className={styles.hiddenInput} accept=".json,.yaml,.yml" onClick={(e) => {
+      <input type="file" title="データを読み込む" ref={importInputRef} className={styles.hiddenInput} accept=".json,.jsonc,.yaml,.yml" onClick={(e) => {
         (e.target as HTMLInputElement).value = '';
         // ピッカーを開く直前にフラグを立てる
         sessionStorage.setItem(SESSION_KEYS.PICKING_FILE, 'true');

@@ -26,27 +26,13 @@ import {
     Download
 } from 'lucide-react';
 import { saveAs } from 'file-saver';
-import { useResume } from '../context/ResumeHooks';
+import { useResume, type EditorMode } from '../context/ResumeHooks';
 import { PortraitUpload } from './PortraitUpload';
 import styles from './Editor.module.scss';
-import { resumeSchema } from '../constants/resumeSchema';
-import { loader } from '@monaco-editor/react';
-import * as monaco from 'monaco-editor';
 import NumberSpinner from './NumberSpinner';
 
-// monaco-yaml のためにローカルの monaco インスタンスを使用するように設定
-loader.config({ monaco });
-
-// JSONの場合は組み込みの機能を設定
-// @ts-expect-error: jsonDefaults の型定義不足を回避
-monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
-    validate: true,
-    schemas: [{
-        uri: 'http://myserver/resume-schema.json',
-        fileMatch: ['*'],
-        schema: resumeSchema
-    }]
-});
+// Monaco Editor の初期設定（JSONC 言語登録、スキーマ設定等）
+import { monaco } from '../config/monacoSetup';
 
 interface ResumeEditorProps {
     fontSize: number;
@@ -139,9 +125,11 @@ export const ResumeEditor: React.FC<ResumeEditorProps> = ({ fontSize, setFontSiz
     /**
      * 現在のエディタの内容をそのままファイルとして保存する
      */
-    const handleSaveRaw = (format: 'yaml' | 'json') => {
+    const handleSaveRaw = (format: EditorMode) => {
         const blob = new Blob([rawText], { type: 'text/plain;charset=utf-8' });
-        saveAs(blob, `resume.${format}`);
+        // JSONC でも拡張子は .json で保存
+        const ext = format === 'jsonc' ? 'json' : format;
+        saveAs(blob, `resume.${ext}`);
         setStatusMessage(`${format.toUpperCase()}保存完了`);
         setTimeout(() => setStatusMessage(null), 2000);
     };
@@ -150,7 +138,7 @@ export const ResumeEditor: React.FC<ResumeEditorProps> = ({ fontSize, setFontSiz
         <Box className={styles.editorRoot}>
             {!isMobile && (
                 <Box className={styles.editorToolbar}>
-                    <Tooltip title="モード切替（YAML/JSONを自動変換します）" arrow>
+                    <Tooltip title="モード切替（YAML/JSONCを自動変換します）" arrow>
                         <Box className={styles.editorLabelSection}>
                             <ToggleButtonGroup
                                 value={mode}
@@ -160,7 +148,7 @@ export const ResumeEditor: React.FC<ResumeEditorProps> = ({ fontSize, setFontSiz
                                 sx={{ height: 24, ml: 1 }}
                             >
                                 <ToggleButton value="yaml" sx={{ fontSize: 10, px: 1 }}>YAML</ToggleButton>
-                                <ToggleButton value="json" sx={{ fontSize: 10, px: 1 }}>JSON</ToggleButton>
+                                <ToggleButton value="jsonc" sx={{ fontSize: 10, px: 1 }}>JSONC</ToggleButton>
                             </ToggleButtonGroup>
                         </Box>
                     </Tooltip>
