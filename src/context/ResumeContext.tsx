@@ -50,8 +50,48 @@ function removeEmptyProperties<T>(obj: T): T {
 }
 
 /**
+ * HistoryItem オブジェクトを短縮文字列 (year/month/content) に逆変換する
+ * normalizeHistoryItem の逆操作。標準フィールドのみのアイテムをスラッシュ区切りに圧縮する。
+ * @param item HistoryItem オブジェクト（id 除去済み）
+ * @returns 短縮文字列、または変換不可能な場合はそのままのオブジェクト
+ */
+const compactHistoryItem = (item: Record<string, unknown>): string | Record<string, unknown> => {
+    const { _shorthand, year, month, day, dow, content, ...extra } = item;
+
+    // _shorthand マーカーがない場合はオブジェクト表記を維持（_shorthand だけ除去して返す）
+    if (!_shorthand) return item;
+
+    // 標準フィールド以外がある場合はオブジェクトのまま返す
+    if (Object.keys(extra).length > 0) {
+        const { _shorthand: _, ...rest } = item;
+        return rest;
+    }
+
+    // content がない場合はオブジェクトのまま
+    if (!content && content !== '') {
+        const { _shorthand: _, ...rest } = item;
+        return rest;
+    }
+
+    const y = year ? String(year) : '';
+    const m = month ? String(month) : '';
+    const d = day ? String(day) : '';
+    const dw = dow ? String(dow) : '';
+    const c = content ? String(content) : '';
+
+    // パターンに応じて短縮文字列を生成（normalizeHistoryItem の逆）
+    if (dw || d) {
+        if (dw) return `${y}/${m}/${d}/${dw}/${c}`;
+        return `${y}/${m}/${d}/${c}`;
+    }
+    if (m) return `${y}/${m}/${c}`;
+    if (y) return `${y}/${c}`;
+    return c;
+};
+
+/**
  * エディタ表示用に履歴書データを整形する
- * 証明写真データを除外し、リスト項目のIDを削除する
+ * 証明写真データを除外し、リスト項目を短縮文字列に圧縮する
  * @param resume 履歴書データ
  * @returns エディタ用オブジェクト
  */
@@ -67,11 +107,12 @@ const prepareResumeForEditor = (resume: ResumeConfig): RecursivePartial<ResumeCo
             cleaned[key] = val.map(item => {
                 if (item && typeof item === 'object') {
                     const { id: __, ...itemRest } = item as Record<string, unknown>;
-                    return itemRest;
+                    // 標準フィールドのみなら短縮文字列に戻す
+                    return compactHistoryItem(itemRest);
                 }
                 return item;
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            }) as any; // HistoryItemのID削除後の一時的な型不整合を許容
+            }) as any;
         }
     });
 

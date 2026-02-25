@@ -122,10 +122,12 @@ const normalizeHistoryItem = (item: string | Partial<HistoryItem>): HistoryItem 
         return { id: generateUUID(), content: String(item) } as HistoryItem;
     }
 
+    // 文字列入力 → _shorthand マーカーを付与して元の形式を記憶
     const parts = item.split('/').map(p => p.trim());
-    const result: HistoryItem = {
+    const result: HistoryItem & { _shorthand?: boolean } = {
         id: generateUUID(),
-        content: ''
+        content: '',
+        _shorthand: true
     };
 
     // 要素数に応じたマッピング
