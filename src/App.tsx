@@ -532,6 +532,10 @@ function AppContent() {
           <Shield size={16} />
           <span>Privacy Policy</span>
         </a>
+        <a href="https://github.com/ayeci/Resumaker/tree/main/example/sample.zip" target="_blank" rel="noopener noreferrer">
+          <Download size={16} />
+          <span>サンプルファイルをダウンロード</span>
+        </a>
       </Box>
 
       {/* モバイル版フッター（タブバー） */}

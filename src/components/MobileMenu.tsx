@@ -224,6 +224,15 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                         </a>
                     </Box>
                     <Typography className={styles.credit}>© 2026 ayeci</Typography>
+
+                    <Divider className={styles.divider} />
+
+                    <Box className={styles.footerLinks}>
+                        <a href="https://github.com/ayeci/Resumaker/tree/main/example/sample.zip" target="_blank" rel="noopener noreferrer">
+                            <Download size={16} />
+                            <span>サンプルファイルをダウンロード</span>
+                        </a>
+                    </Box>
                 </Box>
             </Box>
         </Box>
