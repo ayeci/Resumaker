@@ -622,7 +622,12 @@ export const prepareResumeData = (resume: ResumeConfig, options: ExportOptions =
     }
 
     values['age'] = calculateAge(resume.dob);
-    values['updated'] = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' }) + '\u3000現在';
+
+    if (resume.updated) {
+        values['updated'] = formatDate(resume.updated);
+    } else {
+        values['updated'] = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' });
+    }
 
     const history = buildCombinedHistory(resume, options);
     lists['history'] = history;

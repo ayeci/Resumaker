@@ -104,7 +104,7 @@ const StandardPreview: React.FC<StandardPreviewProps> = ({ resume, exportOptions
                 <Box className={styles.headerBox}>
                     <Typography variant="h1" className={styles.letterSpacingWide}>履歴書</Typography>
                     <Typography variant="body2">
-                        {new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })} 現在
+                        {resume.updated ? formatDate(resume.updated) : new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })} 現在
                     </Typography>
                 </Box>
             )

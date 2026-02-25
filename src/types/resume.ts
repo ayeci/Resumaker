@@ -8,6 +8,8 @@
  * 履歴書データ構造定義
  */
 export interface ResumeConfig {
+    /** 更新日時 */
+    updated: string;
     /** 氏名 */
     name: string;
     /** 氏名（ふりがな） */
@@ -76,9 +78,9 @@ export interface HistoryItem {
     year?: string | '';
     /** 月 */
     month?: string | '';
-    /** 日 (現状未使用) */
+    /** 日 */
     day?: string | '';
-    /** 曜日 (現状未使用) */
+    /** 曜日 */
     dow?: string | '';
     /** 内容（学校名、会社名、資格名など） */
     content?: string | '';
@@ -90,6 +92,7 @@ export interface HistoryItem {
  * 新規作成時の履歴書デフォルト値
  */
 export const DEFAULT_RESUME: ResumeConfig = {
+    updated: new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' }),
     name: "",
     name_kana: "",
     dob: "",
