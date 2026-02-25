@@ -163,67 +163,53 @@ const ExcelPreview: React.FC<ExcelPreviewProps> = ({ file, resume, width, height
                             const columnlen = (config.columnlen || {}) as Record<string | number, number>;
 
                             const calculateMetrics = (img: SourceImage) => {
+                                // ライブラリ（@zenmrp/fortune-sheet-excel）が imagePositionCaculation で
+                                // 正確なピクセル座標を default に計算済み。独自再計算はズレるためライブラリ値を優先。
+                                const d = img.default;
+                                if (d && typeof d.left === 'number' && typeof d.top === 'number'
+                                    && typeof d.width === 'number' && typeof d.height === 'number'
+                                    && d.width > 0 && d.height > 0) {
+                                    return { top: d.top, left: d.left, width: d.width, height: d.height };
+                                }
+
+                                // フォールバック: ライブラリ値がない場合のみ anchor から計算
                                 let top = 0;
                                 let left = 0;
                                 let width = 0;
                                 let height = 0;
 
-                                // 1. 開始位置 (fromRow, fromCol)
-                                const r = img.fromRow ?? img.default?.row ?? 0;
-                                const c = img.fromCol ?? img.default?.column ?? 0;
+                                const r = img.fromRow ?? d?.row ?? 0;
+                                const c = img.fromCol ?? d?.column ?? 0;
                                 const fromRowOff = img.fromRowOff ?? 0;
                                 const fromColOff = img.fromColOff ?? 0;
 
-                                // Top計算
                                 for (let i = 0; i < r; i++) {
                                     top += rowlen[i] ?? DEFAULT_ROW_HEIGHT;
                                 }
-                                const absTop = top + fromRowOff;
+                                top += fromRowOff;
 
-                                // Left計算
                                 for (let i = 0; i < c; i++) {
                                     left += columnlen[i] ?? DEFAULT_COL_WIDTH;
                                 }
-                                const absLeft = left + fromColOff;
+                                left += fromColOff;
 
-                                top = absTop;
-                                left = absLeft;
-
-                                // 2. 終了位置
                                 if (typeof img.toRow === 'number' && typeof img.toCol === 'number') {
                                     let bottom = 0;
                                     let right = 0;
-                                    const rEnd = img.toRow!;
-                                    const cEnd = img.toCol!;
-                                    const rEndOff = img.toRowOff ?? 0;
-                                    const cEndOff = img.toColOff ?? 0;
-
-                                    // Bottom計算
-                                    for (let i = 0; i < rEnd; i++) {
+                                    for (let i = 0; i < img.toRow; i++) {
                                         bottom += rowlen[i] ?? DEFAULT_ROW_HEIGHT;
                                     }
-                                    bottom += rEndOff;
-                                    height = Math.max(0, bottom - absTop);
+                                    bottom += img.toRowOff ?? 0;
+                                    height = Math.max(0, bottom - top);
 
-                                    // Right計算
-                                    for (let i = 0; i < cEnd; i++) {
+                                    for (let i = 0; i < img.toCol; i++) {
                                         right += columnlen[i] ?? DEFAULT_COL_WIDTH;
                                     }
-                                    right += cEndOff;
-                                    width = Math.max(0, right - absLeft);
-
+                                    right += img.toColOff ?? 0;
+                                    width = Math.max(0, right - left);
                                 } else {
-                                    if (img.default?.width) {
-                                        width = img.default.width;
-                                    } else {
-                                        width = columnlen[c] ?? DEFAULT_COL_WIDTH;
-                                    }
-
-                                    if (img.default?.height) {
-                                        height = img.default.height;
-                                    } else {
-                                        height = rowlen[r] ?? DEFAULT_ROW_HEIGHT;
-                                    }
+                                    width = d?.width ?? columnlen[c] ?? DEFAULT_COL_WIDTH;
+                                    height = d?.height ?? rowlen[r] ?? DEFAULT_ROW_HEIGHT;
                                 }
 
                                 return { top, left, width, height };
