@@ -228,7 +228,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                     <Divider className={styles.divider} />
 
                     <Box className={styles.footerLinks}>
-                        <a href="https://github.com/ayeci/Resumaker/tree/main/example/sample.zip" target="_blank" rel="noopener noreferrer">
+                        <a href="https://github.com/ayeci/Resumaker/raw/refs/heads/main/example/sample.zip" target="_blank" rel="noopener noreferrer">
                             <Download size={16} />
                             <span>サンプルファイルをダウンロード</span>
                         </a>
