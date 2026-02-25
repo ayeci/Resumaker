@@ -7,7 +7,7 @@ Created and maintained by ayeci with Antigravity
 
 ## 🚀 使用方法
 
-**アプリURL:** [https://ayeci.github.io/resumaker/](https://ayeci.github.io/resumaker/)
+**アプリURL:** [https://ayeci.github.io/Resumaker/](https://ayeci.github.io/Resumaker/)
 
 ブラウザから上記URLにアクセスするだけで、すぐにご利用いただけます。
 また、PWA（Progressive Web App）に対応しているため、PCやスマートフォンのブラウザメニューから「ホーム画面に追加（アプリをインストール）」することで、ネイティブアプリのようにオフラインでもサクサク動作します。  
