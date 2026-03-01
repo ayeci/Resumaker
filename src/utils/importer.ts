@@ -191,7 +191,7 @@ const normalizeHistoryItem = (item: string | Partial<HistoryItem>): HistoryItem 
     // 3: 年, 月, 内容
     // 4: 年, 月, 日, 内容
     // 5: 年, 月, 日, 曜日, 内容
-    switch (parts.length) {
+    switch (logicalParts.length) {
         case 1:
             result.content = logicalParts[0];
             break;
@@ -216,7 +216,7 @@ const normalizeHistoryItem = (item: string | Partial<HistoryItem>): HistoryItem 
             result.month = logicalParts[1];
             result.day = logicalParts[2];
             result.dow = logicalParts[3];
-            // 5番目以降はすでにcontentに含まれるように結合済みだが、念のため
+            // 5要素目以降は結合済みの想定だが、超過した場合は全てcontentとして再結合する
             result.content = logicalParts.slice(4).join('/');
             break;
     }
