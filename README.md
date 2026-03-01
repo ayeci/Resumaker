@@ -13,6 +13,37 @@ Created and maintained by ayeci with Antigravity
 また、PWA（Progressive Web App）に対応しているため、PCやスマートフォンのブラウザメニューから「ホーム画面に追加（アプリをインストール）」することで、ネイティブアプリのようにオフラインでもサクサク動作します。  
 リポジトリからソースをダウンロードして、ローカル環境で実行することも可能です。（その場合は、`npm install` で必要なパッケージをインストールしてください。）
 
+```mermaid
+graph TD
+    subgraph Storage ["バージョン管理（任意）"]
+        DB[(Gitやファイル管理)]
+    end
+
+    DB --> Input
+
+    subgraph Input ["履歴データファイル"]
+        direction TB
+        YAML["YAML (.yaml)"] -- or --- JSONC["JSONC (.jsonc)"]
+    end
+
+    subgraph Templates ["テンプレートファイル"]
+        direction TB
+        Excel["Excel (.xlsx)"] -- or --- Word["Word (.docx)"]
+    end
+
+    Input --> App
+    Templates --> App
+
+    subgraph App ["Resumaker"]
+        Logic{"テンプレートエンジン<br>＆<br>XMLマッピング"}
+    end
+
+    App --> Output["履歴書"]
+
+    style DB fill:#f9f9f9,stroke:#333
+    style App fill:#f9f9f9,stroke:#333
+```
+
 ## ✨ 特徴
 
 - **YAML/JSONC（コメント許容JSON）によるデータ管理**: 履歴書の情報を可読性の高いYAML形式、またはコメント付きJSON（JSONC）形式で記述します。
@@ -450,7 +481,7 @@ Out Of Memory / Android OSによるChromeプロセスの強制剥奪 など、�
 FortuneSheetを採用したけれど、それまでにいろいろなライブラリを試しては再現性で没になり、を繰り返した。  
 本命はOffice Embeddedによる埋め込みなんだけど、OneDriveにファイルが保存されていることとか、編集が困難とかの課題がある。完全ローカル駆動の要件からも外れるし。  
 マーカーの置換等はXMLを直接編集してからライブラリに渡すことで対応。  
-隣のセルが空なのに文字がはみ出さず（オーバーフローせず）に途切れてしまう： ライブラリ側が v.tb を文字列"1"で比較で比較していたところ、数値1を設定していたことで泥沼に。
+隣のセルが空なのに文字がはみ出さず（オーバーフローせず）に途切れてしまう： ライブラリ側が v.tb を文字列"1"で比較していたところ、数値1を設定していたことで泥沼に。
 
 ### 3. ファイル出力
 
