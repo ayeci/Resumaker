@@ -342,6 +342,13 @@ export const generateWordBlob = async (resume: ResumeConfig, templateFile: File 
         workList.push({ id: 'work-end', year: '', month: '', content: '以上', content_align: 'right' });
     }
 
+    const projectList: HistoryItem[] = (resume.project || []).map(item => ({
+        id: item.id || `proj-${Math.random().toString(36).substr(2, 9)}`,
+        year: item.year,
+        month: item.month,
+        content: item.content
+    }));
+
     const certificateList: HistoryItem[] = resume.certificates.map(item => ({
         id: item.id || `cert-${Math.random().toString(36).substr(2, 9)}`,
         year: item.year,
@@ -408,6 +415,7 @@ export const generateWordBlob = async (resume: ResumeConfig, templateFile: File 
         // 各リストにアライメントマーカー付与処理を適用
         education: processListForAlignment(educationList),
         work: processListForAlignment(workList),
+        project: processListForAlignment(projectList),
         certificates: processListForAlignment(certificateList),
         history: processListForAlignment(historyList)
     };

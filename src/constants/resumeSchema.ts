@@ -76,6 +76,13 @@ export const resumeSchema = {
                 $ref: "#/definitions/historyItem"
             }
         },
+        project: {
+            type: "array",
+            description: "業務実績・プロジェクト",
+            items: {
+                $ref: "#/definitions/historyItem"
+            }
+        },
         certificates: {
             type: "array",
             description: "免許・資格リスト",

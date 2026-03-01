@@ -123,7 +123,62 @@ const normalizeHistoryItem = (item: string | Partial<HistoryItem>): HistoryItem 
     }
 
     // 文字列入力 → _shorthand マーカーを付与して元の形式を記憶
-    const parts = item.split('/').map(p => p.trim());
+    // URL等が含まれる場合に全体が分割されてしまうのを防ぐため、
+    // まず最初の最大4つ（年、月、日、曜日）として解釈可能な部分だけを切り出し、残りを結合するアプローチをとる。
+    // 日付フィールド（年/月等）は先頭から連続している想定。
+    const parts = item.split('/');
+
+    // 日付フィールドとして解釈されるべき部分（基本的に英数字や短い文字列）を見つける
+    const dateParts: string[] = [];
+    const contentParts: string[] = [];
+
+    // 'http' や 'https' が含まれている場合は特殊扱いにするか、
+    // 単純に最初の数要素だけを取り出すか。
+    // 現状の仕様 (年/月/内容 -> length 3等) を維持しつつ、
+    // URLの ':' の後の '//' や、パスに含まれる '/' を過剰解釈しないようにする。
+
+    // スラッシュが多い場合、最大でも最初から4要素までを「日付・曜日」候補とし、
+    // 残りをすべて「content」として再結合する設計に変更。
+    // （元の仕様: 1=content, 2=year/content, 3=year/month/content, 4=year/month/day/content, 5=year/month/day/dow/content）
+
+    const maxDateFields = 4; // content より前のフィールドの最大数
+
+    // URLっぽさ（http://）等のせいで過剰分割されている場合は後半をまとめる
+    // 単一項目の場合はそのまま
+    if (parts.length > 1) {
+        // 先頭から順に見て「明らかに年や月ではない（長い文字列など）」が出た時点で、
+        // そこから先は全てcontentとして扱う
+        let contentStartIndex = 0;
+        for (let i = 0; i < parts.length; i++) {
+            const p = parts[i].trim();
+            // 年,月,日,曜日は比較的短い (1〜10文字程度) と推測。
+            // HTTPが含まれる、または長すぎる場合はcontentの始まりとみなす。
+            if (i >= maxDateFields || p.length > 15 || p.startsWith('http') || p.includes('://')) {
+                contentStartIndex = i;
+                break;
+            }
+            contentStartIndex = i + 1;
+        }
+
+        // もし全部が短ければ、最後の1つをcontentとする (元の挙動通り)
+        if (contentStartIndex === parts.length) {
+            contentStartIndex = parts.length - 1;
+        }
+
+        // 最初の数要素を日付系として確保
+        for (let i = 0; i < contentStartIndex; i++) {
+            dateParts.push(parts[i].trim());
+        }
+
+        // 残りを '/' で再度結合して content とする
+        const remaining = parts.slice(contentStartIndex).join('/');
+        contentParts.push(remaining.trim());
+    } else {
+        contentParts.push(parts[0].trim());
+    }
+
+    const logicalParts = [...dateParts, ...contentParts];
+
     const result: HistoryItem & { _shorthand?: boolean } = {
         id: generateUUID(),
         content: '',
@@ -138,30 +193,31 @@ const normalizeHistoryItem = (item: string | Partial<HistoryItem>): HistoryItem 
     // 5: 年, 月, 日, 曜日, 内容
     switch (parts.length) {
         case 1:
-            result.content = parts[0];
+            result.content = logicalParts[0];
             break;
         case 2:
-            result.year = parts[0];
-            result.content = parts[1];
+            result.year = logicalParts[0];
+            result.content = logicalParts[1];
             break;
         case 3:
-            result.year = parts[0];
-            result.month = parts[1];
-            result.content = parts[2];
+            result.year = logicalParts[0];
+            result.month = logicalParts[1];
+            result.content = logicalParts[2];
             break;
         case 4:
-            result.year = parts[0];
-            result.month = parts[1];
-            result.day = parts[2];
-            result.content = parts[3];
+            result.year = logicalParts[0];
+            result.month = logicalParts[1];
+            result.day = logicalParts[2];
+            result.content = logicalParts[3];
             break;
         case 5:
         default:
-            result.year = parts[0];
-            result.month = parts[1];
-            result.day = parts[2];
-            result.dow = parts[3];
-            result.content = parts[4];
+            result.year = logicalParts[0];
+            result.month = logicalParts[1];
+            result.day = logicalParts[2];
+            result.dow = logicalParts[3];
+            // 5番目以降はすでにcontentに含まれるように結合済みだが、念のため
+            result.content = logicalParts.slice(4).join('/');
             break;
     }
 
@@ -177,7 +233,7 @@ const normalizeHistoryItem = (item: string | Partial<HistoryItem>): HistoryItem 
 export const normalizeResumeData = (data: Partial<ResumeConfig>): ResumeConfig => {
     if (!data || typeof data !== 'object') return data as ResumeConfig;
 
-    const listKeys: (keyof ResumeConfig)[] = ['education', 'work_experience', 'certificates'];
+    const listKeys: (keyof ResumeConfig)[] = ['education', 'work_experience', 'project', 'certificates'];
     const result = { ...data } as Record<string, unknown>;
 
     listKeys.forEach(key => {

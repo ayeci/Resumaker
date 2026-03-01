@@ -99,7 +99,7 @@ const prepareResumeForEditor = (resume: ResumeConfig): RecursivePartial<ResumeCo
     const { portrait: _, ...rest } = resume;
     const cleaned = { ...rest } as RecursivePartial<ResumeConfig>;
 
-    const listKeys: (keyof ResumeConfig)[] = ['education', 'work_experience', 'certificates'];
+    const listKeys: (keyof ResumeConfig)[] = ['education', 'work_experience', 'project', 'certificates'];
 
     listKeys.forEach(key => {
         const val = cleaned[key];

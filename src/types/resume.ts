@@ -38,6 +38,8 @@ export interface ResumeConfig {
     education: HistoryItem[];
     /** 職歴リスト */
     work_experience: HistoryItem[];
+    /** プロジェクトリスト */
+    project: HistoryItem[];
     /** 免許・資格リスト */
     certificates: HistoryItem[];
     /** 趣味・特技・スキル */
@@ -107,6 +109,7 @@ export const DEFAULT_RESUME: ResumeConfig = {
     number_of_dependents: 0,
     education: [],
     work_experience: [],
+    project: [],
     certificates: [],
     skills: "",
     motivation: "",

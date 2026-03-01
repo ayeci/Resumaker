@@ -102,6 +102,14 @@ export const buildCombinedHistory = (resume: ResumeConfig, options: ExportOption
         }
     }
 
+    // プロジェクト等（職務経歴の詳細など）
+    const project = resume.project || [];
+    if (project.length > 0) {
+        list.push({ id: 'project-header', content: '業務実績・プロジェクト', content_align: 'center' });
+        // 同様に職歴と同じ「現在に至る」ロジックが必要かは適宜。とりあえずそのまま追加。
+        list.push(...project);
+    }
+
     // 履歴全体の「以上」
     // データが存在する場合のみ付与チェック
     if (list.length > 0 && options.isHistoryEndMarker) {
