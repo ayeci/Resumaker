@@ -81,4 +81,36 @@ monaco.languages.json.jsonDefaults.setDiagnosticsOptions({
     }]
 });
 
+// --- Link Provider (メールアドレスの mailto リンク化) ---
+const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
+
+const registerEmailLinkProvider = (language: string) => {
+    monaco.languages.registerLinkProvider(language, {
+        provideLinks(model) {
+            const numLines = model.getLineCount();
+            const links: monaco.languages.ILink[] = [];
+
+            for (let i = 1; i <= numLines; i++) {
+                const lineContent = model.getLineContent(i);
+                let match;
+                // emailRegex の lastIndex をリセット
+                emailRegex.lastIndex = 0;
+                while ((match = emailRegex.exec(lineContent)) !== null) {
+                    const startColumn = match.index + 1;
+                    const endColumn = startColumn + match[0].length;
+                    links.push({
+                        range: new monaco.Range(i, startColumn, i, endColumn),
+                        url: `mailto:${match[0]}`,
+                        tooltip: `Send mail`
+                    });
+                }
+            }
+            return { links };
+        }
+    });
+};
+
+registerEmailLinkProvider('yaml');
+registerEmailLinkProvider('jsonc');
+
 export { monaco };
