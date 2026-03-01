@@ -10,7 +10,6 @@ import * as jsonc from 'jsonc-parser';
 import { DEFAULT_RESUME, type ResumeConfig, DEFAULT_EXPORT_OPTIONS, type ExportOptions, type TemplateEntry } from '../types/resume';
 import { ResumeContext, type EditorMode } from './ResumeHooks';
 import { normalizeResumeData } from '../utils/importer';
-import sampleYaml from '../../example/sample.yaml?raw'; // サンプルデータを読み込む
 import { generateUUID } from '../utils/uuid';
 import { templateFileStore, clearTemplateFileStore } from '../store/fileStore';
 import { checkNeedsLimit } from '../utils/device';
@@ -242,11 +241,11 @@ const serializeResume = (resume: ResumeConfig, mode: EditorMode): string => {
  * 履歴書データ管理プロバイダー
  * アプリケーション全体で履歴書の状態を共有する
  */
-export const ResumeProvider = ({ children }: { children: ReactNode }) => {
+export const ResumeProvider = ({ children, initialData }: { children: ReactNode, initialData: string }) => {
     // サンプルデータを初期値としてロード
     const initialResume = (() => {
         try {
-            const parsed = yaml.load(sampleYaml, { schema: yaml.JSON_SCHEMA });
+            const parsed = yaml.load(initialData, { schema: yaml.JSON_SCHEMA });
             if (parsed && typeof parsed === 'object') {
                 return normalizeResumeData(parsed as Partial<ResumeConfig>) as ResumeConfig;
             }
@@ -258,7 +257,7 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
 
     const [resume, setResumeState] = useState<ResumeConfig>(initialResume);
     const [mode, setMode] = useState<EditorMode>('yaml');
-    const [rawText, setRawText] = useState<string>(sampleYaml);
+    const [rawText, setRawText] = useState<string>(initialData);
     const [parseError, setParseError] = useState<{ message: string; line?: number } | null>(null);
     const [sourceFormat, setSourceFormat] = useState<'word' | 'excel' | 'pdf' | 'other' | null>(null);
     const [templates, setTemplates] = useState<TemplateEntry[]>([]);
@@ -579,7 +578,7 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
 
     const resetToSample = useCallback(() => {
         try {
-            const parsed = yaml.load(sampleYaml, { schema: yaml.JSON_SCHEMA });
+            const parsed = yaml.load(initialData, { schema: yaml.JSON_SCHEMA });
             if (parsed && typeof parsed === 'object') {
                 const normalized = normalizeResumeData(parsed as Partial<ResumeConfig>);
                 const merged = { ...normalized } as ResumeConfig;
@@ -592,7 +591,7 @@ export const ResumeProvider = ({ children }: { children: ReactNode }) => {
                 if (mode === 'jsonc') {
                     updateRawTextExternally(JSON.stringify(merged, null, 2));
                 } else {
-                    updateRawTextExternally(sampleYaml);
+                    updateRawTextExternally(initialData);
                 }
             }
         } catch (e) {

@@ -38,6 +38,7 @@ lint_log.txt
 # sample files
 example/*
 !example/sample*
+!example/ayeci.yaml
 
 # scripts and temporary debug outputs
 *.cjs
