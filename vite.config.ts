@@ -1,39 +1,45 @@
-import { defineConfig, type PluginOption } from 'vite'
-import react from '@vitejs/plugin-react'
-import { VitePWA } from 'vite-plugin-pwa';
+import { defineConfig, type PluginOption } from "vite";
+import react from "@vitejs/plugin-react";
+import { VitePWA } from "vite-plugin-pwa";
 
 // https://vite.dev/config/
 export default defineConfig(async () => {
   const plugins: PluginOption[] = [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'favicon.svg', 'apple-touch-icon.png', 'web-app-manifest-192x192.png', 'web-app-manifest-512x512.png'],
+      registerType: "autoUpdate",
+      includeAssets: [
+        "favicon.ico",
+        "favicon.svg",
+        "apple-touch-icon.png",
+        "web-app-manifest-192x192.png",
+        "web-app-manifest-512x512.png",
+      ],
       workbox: {
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
       },
       manifest: {
-        "name": "Resumaker",
-        "short_name": "Resumaker",
-        "icons": [
+        name: "Resumaker",
+        short_name: "Resumaker",
+        icons: [
           {
-            "src": "web-app-manifest-192x192.png",
-            "sizes": "192x192",
-            "type": "image/png",
-            "purpose": "maskable"
+            src: "web-app-manifest-192x192.png",
+            sizes: "192x192",
+            type: "image/png",
+            purpose: "maskable",
           },
           {
-            "src": "web-app-manifest-512x512.png",
-            "sizes": "512x512",
-            "type": "image/png",
-            "purpose": "maskable"
-          }
+            src: "web-app-manifest-512x512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
         ],
-        "theme_color": "#ffffff",
-        "background_color": "#ffffff",
-        "display": "standalone"
-      }
-    })
+        theme_color: "#ffffff",
+        background_color: "#ffffff",
+        display: "standalone",
+      },
+    }),
   ];
 
   /*// 【裏技】ローカルに basicSsl がインストールされている場合だけ有効化する
@@ -47,18 +53,18 @@ export default defineConfig(async () => {
   //*/
 
   return {
-    base: '/Resumaker/',
+    base: "./",
     plugins: plugins,
     build: {
       chunkSizeWarningLimit: 1600,
       rollupOptions: {
         output: {
           manualChunks: {
-            vendor: ['react', 'react-dom'],
-            excel: ['xlsx'],
-            pdf: ['pdfjs-dist'],
-            office: ['docxtemplater', 'pizzip', 'mammoth'],
-            ui: ['lucide-react', 'clsx'],
+            vendor: ["react", "react-dom"],
+            excel: ["xlsx"],
+            pdf: ["pdfjs-dist"],
+            office: ["docxtemplater", "pizzip", "mammoth"],
+            ui: ["lucide-react", "clsx"],
           },
         },
       },
