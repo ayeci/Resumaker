@@ -31,7 +31,7 @@ const MAX_TEMPLATES = 5;
  * レイアウトの構築、モード切り替え、エクスポート機能の呼び出しを行う
  */
 function AppContent() {
-  const { resume, templates, addTemplates, removeTemplate, selectedTemplateId, setSelectedTemplateId, previewMode, setPreviewMode, exportOptions, importData, toggleTemplateCheck, rawText } = useResume();
+  const { resume, templates, addTemplates, removeTemplate, selectedTemplateId, setSelectedTemplateId, previewMode, setPreviewMode, exportOptions, importData, toggleTemplateCheck, rawText, setPortraitFile } = useResume();
 
 
 
@@ -46,8 +46,10 @@ function AppContent() {
   // モバイル判定
   const [isMobile, setIsMobile] = useState(checkIsMobile());
   const [editorFontSize, setEditorFontSize] = useState(14);
+  const [isDragging, setIsDragging] = useState(false);
 
   const isResizing = useRef(false);
+  const dragCounter = useRef(0);
   const templateInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
@@ -294,8 +296,118 @@ function AppContent() {
     document.body.style.cursor = 'col-resize';
   };
 
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current += 1;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current -= 1;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter.current = 0;
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const files = Array.from(e.dataTransfer.files);
+      const imageFile = files.find(f => f.type.startsWith('image/'));
+      const dataFile = files.find(f => /\.(json|jsonc|yaml|yml)$/i.test(f.name));
+      const templateFiles = files.filter(f => /\.(docx|xlsx)$/i.test(f.name));
+
+      let processed = false;
+
+      // 画像の処理
+      if (imageFile) {
+        setPortraitFile(imageFile);
+        processed = true;
+      }
+
+      // データの処理
+      if (dataFile) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const content = ev.target?.result as string;
+          if (content) importData(content, 'auto');
+        };
+        reader.readAsText(dataFile);
+        processed = true;
+      }
+
+      // テンプレートの処理
+      if (templateFiles.length > 0) {
+        sessionStorage.setItem(SESSION_KEYS.HEAVY_TASK, 'true');
+        setSelectedTemplateId(null);
+        setPreviewMode('standard');
+
+        const needsLimit = checkNeedsLimit();
+        const filesToProcess = needsLimit && templateFiles.length > MAX_TEMPLATES
+          ? templateFiles.slice(0, MAX_TEMPLATES)
+          : templateFiles;
+
+        if (needsLimit && templateFiles.length > MAX_TEMPLATES) {
+          notify("template-limit-reached", "warning", `先頭の${MAX_TEMPLATES}件のみ読み込みました。モバイル環境ではメモリの制約のため一度に読み込めるテンプレートが制限されます。`);
+        }
+
+        try {
+          for (let i = 0; i < filesToProcess.length; i++) {
+            await addTemplates([filesToProcess[i]]);
+            if (needsLimit) {
+              await new Promise(r => setTimeout(r, 500));
+            }
+          }
+          setPreviewMode('template');
+          if (!needsLimit) {
+            setMobileView('preview');
+          } else {
+            setMobileView('editor');
+          }
+        } finally {
+          // 何もしない
+        }
+        processed = true;
+      }
+
+      if (processed) {
+        notify("file-dropped", "success", "ファイルを読み込みました。");
+      } else {
+        notify("drop-no-match", "warning", "対応していないファイル形式です。");
+      }
+    }
+  };
+
   return (
-    <Box className={styles.appContainer}>
+    <Box 
+      className={styles.appContainer}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {isDragging && (
+        <Box className={styles.dragOverlay}>
+          <FileUp size={64} className={styles.dragOverlayIcon} />
+          <Typography className={styles.dragOverlayText}>
+            ファイルをドロップして読み込む
+          </Typography>
+        </Box>
+      )}
       <AppBar position="static" color="default" elevation={1} className={clsx(styles.appHeader, "print-hidden")}>
         <Toolbar className={styles.headerToolbar}>
           <Box className={styles.headerLogoSection}>

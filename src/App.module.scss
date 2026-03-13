@@ -448,3 +448,43 @@
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
     }
 }
+
+/* ドラッグ中のオーバーレイ */
+.dragOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    background-color: rgba(255, 255, 255, 0.85);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: #2563eb;
+    pointer-events: none;
+    transition: opacity 0.2s;
+}
+
+.dragOverlayIcon {
+    animation: bounce 1s infinite alternate;
+    margin-bottom: 16px;
+}
+
+.dragOverlayText {
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+@keyframes bounce {
+    from {
+        transform: translateY(0);
+    }
+    to {
+        transform: translateY(-10px);
+    }
+}
