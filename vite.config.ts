@@ -61,9 +61,7 @@ export default defineConfig(async () => {
         output: {
           manualChunks: {
             vendor: ["react", "react-dom"],
-            excel: ["xlsx"],
-            pdf: ["pdfjs-dist"],
-            office: ["docxtemplater", "pizzip", "mammoth"],
+            office: ["docxtemplater", "pizzip"],
             ui: ["lucide-react", "clsx"],
           },
         },

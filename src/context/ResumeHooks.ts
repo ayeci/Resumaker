@@ -36,7 +36,7 @@ export interface ResumeContextType {
     /** 外部データをインポートする */
     importData: (data: string | ResumeConfig, type: 'jsonc' | 'yaml' | 'auto') => void;
     /** インポート元のフォーマット */
-    sourceFormat: 'word' | 'excel' | 'pdf' | 'other' | null;
+    sourceFormat: 'word' | 'excel' | 'other' | null;
     /** ロードされたテンプレートリスト */
     templates: TemplateEntry[];
     /** テンプレートを追加する (単一) */

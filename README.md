@@ -524,7 +524,6 @@ Geminiが何度言っても実行計画を英語で出してくるとか、実�
 
 - **Core**: React 19 / TypeScript / Vite 7
 - **UI & Styling**: Material UI (MUI) v7 / Base UI / Emotion / Sass (SCSS Modules)
-- **Data Import**: xlsx (SheetJS) / Mammoth / pdfjs-dist
 - **Export (XML Direct Manipulation)**: PizZip / Docxtemplater / docxtemplater-image-module-free
 - **Preview**: FortuneSheet / docx-preview
 - **Editor**: Monaco Editor / monaco-yaml / jsonc-parser / js-yaml
@@ -555,15 +554,12 @@ Geminiが何度言っても実行計画を英語で出してくるとか、実�
 | js-yaml | MIT |
 | jsonc-parser | MIT |
 | lucide-react | ISC |
-| mammoth | BSD-2-Clause |
 | monaco-editor | MIT |
 | monaco-yaml | MIT |
-| pdfjs-dist | Apache-2.0 |
 | pizzip | MIT OR GPL-3.0 |
 | react | MIT |
 | react-dom | MIT |
 | react-icons | MIT |
-| xlsx | Apache-2.0 |
 
 ### DevDependencies
 
